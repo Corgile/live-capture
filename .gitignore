@@ -3,3 +3,4 @@ cmake-build
 one_by_one.py
 example
 build
+cmake-build-debug
