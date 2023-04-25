@@ -1,0 +1,129 @@
+{
+	"configurations" : 
+	[
+		{
+			"directories" : 
+			[
+				{
+					"build" : ".",
+					"childIndexes" : 
+					[
+						1
+					],
+					"jsonFile" : "directory-.-Debug-f5ebdc15457944623624.json",
+					"minimumCMakeVersion" : 
+					{
+						"string" : "3.24"
+					},
+					"projectIndex" : 0,
+					"source" : "."
+				},
+				{
+					"build" : "src",
+					"childIndexes" : 
+					[
+						2,
+						3
+					],
+					"jsonFile" : "directory-src-Debug-b6cf2213fc5053b67c22.json",
+					"minimumCMakeVersion" : 
+					{
+						"string" : "3.24"
+					},
+					"parentIndex" : 0,
+					"projectIndex" : 0,
+					"source" : "src",
+					"targetIndexes" : 
+					[
+						1
+					]
+				},
+				{
+					"build" : "src/io",
+					"jsonFile" : "directory-src.io-Debug-9234336bce768e391f5d.json",
+					"minimumCMakeVersion" : 
+					{
+						"string" : "3.24"
+					},
+					"parentIndex" : 1,
+					"projectIndex" : 0,
+					"source" : "src/io",
+					"targetIndexes" : 
+					[
+						0
+					]
+				},
+				{
+					"build" : "src/packet",
+					"jsonFile" : "directory-src.packet-Debug-eb71c2b72e12d1a23d68.json",
+					"minimumCMakeVersion" : 
+					{
+						"string" : "3.24"
+					},
+					"parentIndex" : 1,
+					"projectIndex" : 0,
+					"source" : "src/packet",
+					"targetIndexes" : 
+					[
+						2
+					]
+				}
+			],
+			"name" : "Debug",
+			"projects" : 
+			[
+				{
+					"directoryIndexes" : 
+					[
+						0,
+						1,
+						2,
+						3
+					],
+					"name" : "nprint",
+					"targetIndexes" : 
+					[
+						0,
+						1,
+						2
+					]
+				}
+			],
+			"targets" : 
+			[
+				{
+					"directoryIndex" : 2,
+					"id" : "io::@8c9074cf2e563e673ee9",
+					"jsonFile" : "target-io-Debug-d6f7558acf200294624d.json",
+					"name" : "io",
+					"projectIndex" : 0
+				},
+				{
+					"directoryIndex" : 1,
+					"id" : "nprint::@145eef247bfb46b6828c",
+					"jsonFile" : "target-nprint-Debug-f32a20215055a484d803.json",
+					"name" : "nprint",
+					"projectIndex" : 0
+				},
+				{
+					"directoryIndex" : 3,
+					"id" : "packet::@ad75048444ba3fe5d043",
+					"jsonFile" : "target-packet-Debug-8fe39770e67efd1a3bda.json",
+					"name" : "packet",
+					"projectIndex" : 0
+				}
+			]
+		}
+	],
+	"kind" : "codemodel",
+	"paths" : 
+	{
+		"build" : "/home/gzhuadmin/workspace/live-capture/cmake-build-debug",
+		"source" : "/home/gzhuadmin/workspace/live-capture"
+	},
+	"version" : 
+	{
+		"major" : 2,
+		"minor" : 5
+	}
+}

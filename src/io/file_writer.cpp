@@ -1,6 +1,5 @@
 #include "file_writer.hpp"
 
-#include <utility>
 
 void FileWriter::set_conf(const Config &conf) {
 	this->config = conf;
@@ -96,13 +95,14 @@ FileWriter::build_bitstring_header(std::vector<std::string> header) {
 	for (i = 0; i < prefix_len; i++)
 		compressed_header.push_back(header[i]);
 
-	if (this->config.regex != "") {
+	if (!this->config.regex.empty()) {
 		std::regex str_regex(this->config.regex);
 		for (i = prefix_len; i < header.size(); i++) {
-			if (!regex_match(header[i], str_regex)) {
-				keep_indexes.push_back(i - prefix_len);
-				compressed_header.push_back(header[i]);
+			if (regex_match(header[i], str_regex)) {
+                continue;
 			}
+            keep_indexes.push_back(i - prefix_len);
+            compressed_header.push_back(header[i]);
 		}
 	} else {
 		for (i = prefix_len; i < header.size(); i++) {
@@ -120,26 +120,6 @@ void FileWriter::write_csv_stringvec(std::vector<std::string> &v) {
 	for (i = 0; i < v.size(); i++) {
 		fprintf(outfile, "%s", v[i].c_str());
 		if (i != v.size() - 1)
-			fprintf(outfile, ",");
-	}
-	fprintf(outfile, "\n");
-}
-
-void FileWriter::write_bitstring_line(std::vector<std::string> &prefix,
-                                      std::vector<int8_t> &bitstring_vec) {
-	uint32_t i;
-
-	for (i = 0; i < prefix.size(); i++) {
-		if (keep_indexes.empty()) {
-			fprintf(outfile, "%s", prefix[i].c_str());
-		} else {
-			fprintf(outfile, "%s,", prefix[i].c_str());
-		}
-	}
-
-	for (i = 0; i < keep_indexes.size(); i++) {
-		fprintf(outfile, "%d", bitstring_vec[keep_indexes[i]]);
-		if (i != keep_indexes.size() - 1)
 			fprintf(outfile, ",");
 	}
 	fprintf(outfile, "\n");

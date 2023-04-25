@@ -1,0 +1,2 @@
+/usr/bin/ar qc libio.a CMakeFiles/io.dir/file_writer.cpp.o CMakeFiles/io.dir/io_parser.cpp.o CMakeFiles/io.dir/nprint_parser.cpp.o CMakeFiles/io.dir/pcap_parser.cpp.o CMakeFiles/io.dir/stringfile_parser.cpp.o
+/usr/bin/ranlib libio.a

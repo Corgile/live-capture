@@ -1,0 +1,2 @@
+/usr/bin/ar qc libpacket.a CMakeFiles/packet.dir/ethernet_header.cpp.o CMakeFiles/packet.dir/icmp_header.cpp.o CMakeFiles/packet.dir/ipv4_header.cpp.o CMakeFiles/packet.dir/ipv6_header.cpp.o CMakeFiles/packet.dir/packet_header.cpp.o CMakeFiles/packet.dir/payload.cpp.o CMakeFiles/packet.dir/radiotap_header.cpp.o CMakeFiles/packet.dir/superpacket.cpp.o CMakeFiles/packet.dir/tcp_header.cpp.o CMakeFiles/packet.dir/udp_header.cpp.o CMakeFiles/packet.dir/wlan_header.cpp.o
+/usr/bin/ranlib libpacket.a

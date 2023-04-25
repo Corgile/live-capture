@@ -11,14 +11,6 @@ Config::Config() {
 	this->icmp = 0;
 	this->payload = 0;
 	this->fill_with = -1;
-	this->num_packets = 0;
-	this->absolute_timestamps = 0;
-	this->relative_timestamps = 0;
-	this->pcap = 0;
-	this->csv = 0;
-	this->stats = 0;
-	this->nprint = 0;
-	this->verbose = 0;
 	this->live_capture = 0;
 	this->output_index = 0;
 	this->regex = "";
@@ -36,7 +28,6 @@ Config Config::get_instance() {
 	config.set_tcp(true);
 	config.set_udp(true);
 	config.set_icmp(true);
-	config.set_stats(true);
 	config.set_payload(20);
 	// 20 bytes of payload
 	config.set_infile("");

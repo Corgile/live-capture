@@ -17,12 +17,12 @@ struct wlan_header {
 class WlanHeader : public PacketHeader {
     public:
         /* Required Functions */
-        void* get_raw();
-        void set_raw(void *raw);
-        void print_header(FILE *out);
-        uint32_t get_header_len();
-        void get_bitstring(std::vector<int8_t>  &to_fill, int8_t fill_with);
-        void get_bitstring_header(std::vector<std::string> &to_fill);
+        void* get_raw() override;
+        void set_raw(void *raw) override;
+        void print_header(FILE *out) override;
+        uint32_t get_header_len() override;
+        void get_bitstring(std::vector<int8_t>  &to_fill, int8_t fill_with) override;
+        void get_bitstring_header(std::vector<std::string> &to_fill) override;
 
         std::string get_tx_mac();
 

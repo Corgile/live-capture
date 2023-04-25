@@ -37,9 +37,6 @@ public:
 
 	void write_bitstring_line(std::vector<std::string> &prefix, std::vector<int8_t> &bistring_vec);
 
-//	void write_fields_line(std::vector<std::string> &prefix, std::vector<std::string> &fields_vec);
-//
-//	void write_line(std::string &line);
 
 private:
 	void recursive_mkdir(char *path);
@@ -51,7 +48,7 @@ private:
 
 	std::vector<std::string> build_bitstring_header(std::vector<std::string> header);
 
-	uint32_t payload_len;
+	uint32_t payload_len{};
 	FILE *outfile = nullptr;
 };
 
