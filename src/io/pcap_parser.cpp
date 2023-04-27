@@ -1,6 +1,11 @@
 #include "pcap_parser.hpp"
 #include <iostream>
-#include <python3.7m/Python.h>
+#include <cstring>
+#include <sstream>
+
+// 手动链接Python库
+
+
 
 
 void PCAPParser::perform() {
@@ -83,44 +88,25 @@ PCAPParser::PCAPParser(Config config, FileWriter file_writer)
 
 void PCAPParser::perform_predict(const u_char *packet) {
 
-	Py_Initialize();
-	PyRun_SimpleString("print('Hello World')");
-	Py_Finalize();
-	return;
-
-    std::vector<int> most_important_indices = {
-            1, 107, 231, 25, 109, 15, 233, 0, 2, 3, 235, 4,
-            29, 234, 232, 199, 239, 5, 230, 16, 180, 98, 236,
-            6, 31, 238, 237, 30, 24, 9, 11, 126, 13, 7, 198,
-            10, 43, 56, 50, 28, 608, 202, 318, 201, 117, 8,
-            23, 34, 111, 12, 48, 33, 51, 32, 27, 45, 14, 46,
-            54, 74, 119, 40, 228, 125, 37, 224, 35, 44, 61,
-            248, 118, 70, 121, 60, 49, 52, 96, 206, 17, 39,
-            36, 18, 38, 123, 41, 241, 57, 240, 66, 222, 20,
-            122, 62, 134, 204, 42, 69, 59, 192, 229, 203, 226,
-            120, 65, 55, 129, 26, 130, 19, 127, 227, 21, 99,
-            139, 58, 64, 68, 213, 113, 140, 135, 141, 53, 67, 200, 22, 72, 63
-    };
-    std::vector<int> samples(768);
-    std::vector<std::string> labels{
-            "benign",
-            "ddos",
-            "dos",
-            "ftp-patator",
-            "infiltration",
-            "port-scan",
-            "ssh-patator",
-            "web-attack"
-    };
-    for (const auto &item: this->bitstring_vec) {
-        samples.emplace_back(int(item));
+    std::cout << "PCAPParser::perform_predict" << std::endl;
+    std::ostringstream oss;
+    // 将 vector 中的元素写入字符串流中，并以逗号分隔
+    for (auto it = bitstring_vec.begin(); it != bitstring_vec.end(); ++it) {
+        if (it != bitstring_vec.begin()) {
+            oss << ",";
+        }
+        oss << *it;
     }
 
-    std::vector<float> X(128);
-    for (int i = 0; i < 128; ++i) {
-        X[i] = float(samples[most_important_indices[i]]);
-    }
+    auto bitstring = oss.str().c_str();
 
+    std::cout << "数据包: " << oss.str().c_str() << std::endl;
+    std::string label;
+    std::cout << "调Python" << std::endl;
+	CallPython::Method(bitstring, label);
+    std::cout << "调完Python" << std::endl;
+
+#ifdef FUCK
 
     //auto result = this->m_model_file->predict(inputs);
 
@@ -161,6 +147,7 @@ void PCAPParser::perform_predict(const u_char *packet) {
               << " |  Source IP: " << src_ip << " -> "
               << labels[index]
               << " -> Destination IP: " << dst_ip << std::endl;
+#endif
 }
 
 

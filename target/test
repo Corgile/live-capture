@@ -1,0 +1,11 @@
+make clean
+
+sudo cmake ..
+
+sudo make -j8
+
+sudo rm -rf  ./live-capture
+
+mv src/live-capture ./
+
+sudo ./live-capture

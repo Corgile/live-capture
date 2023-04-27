@@ -16,32 +16,33 @@
 #include "config.hpp"
 #include "file_writer.hpp"
 #include "superpacket.hpp"
+#include "call_python.hpp"
 
 /**
  * Parses a PCAP from a written file
  */
 // 完整定义的IP首部结构体
-struct iphdr {
-#if defined(__LITTLE_ENDIAN_BITFIELD)
-	uint8_t ihl:4,
-                version:4;
-#elif defined(__BIG_ENDIAN_BITFIELD)
-	uint8_t version:4,
-                ihl:4;
-#else
-
-#endif
-	uint8_t tos;
-	uint16_t tot_len;
-	uint16_t id;
-	uint16_t frag_off;
-	uint8_t ttl;
-	uint8_t protocol;
-	uint16_t check;
-	uint32_t saddr;
-	uint32_t daddr;
-	//Other fields
-};
+//struct iphdr {
+//#if defined(__LITTLE_ENDIAN_BITFIELD)
+//	uint8_t ihl:4,
+//                version:4;
+//#elif defined(__BIG_ENDIAN_BITFIELD)
+//	uint8_t version:4,
+//                ihl:4;
+//#else
+//
+//#endif
+//	uint8_t tos;
+//	uint16_t tot_len;
+//	uint16_t id;
+//	uint16_t frag_off;
+//	uint8_t ttl;
+//	uint8_t protocol;
+//	uint16_t check;
+//	uint32_t saddr;
+//	uint32_t daddr;
+//	//Other fields
+//};
 
 class PCAPParser {
 public:
