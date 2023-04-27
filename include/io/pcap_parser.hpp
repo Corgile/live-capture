@@ -62,18 +62,20 @@ private:
     uint32_t linktype;
 
     std::vector<std::string> custom_output;
-    std::vector<int8_t> bitstring_vec;
+    static std::vector<int8_t> bitstring_vec;
     std::vector<std::string> fields_vec;
 
     pcap_t *open_live_handle();
 
     void set_filter(pcap_t *handle, char *filter) const;
 
-    void perform_predict(const u_char *packet);
+    static void perform_predict(const u_char *packet);
 
     static void packet_handler(u_char *user_data, const struct pcap_pkthdr *packet_header, const u_char *packet);
 
     static std::string get_protocol_name(u_char * packet);
+
+    SuperPacket *process_packet(void *pVoid);
 
 };
 

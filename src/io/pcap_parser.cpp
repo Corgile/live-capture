@@ -1,6 +1,5 @@
 #include "pcap_parser.hpp"
 #include <iostream>
-#include <cstring>
 #include <sstream>
 
 // 手动链接Python库
@@ -12,7 +11,7 @@ void PCAPParser::perform() {
     pcap_t *live_cap = this->open_live_handle();
     this->set_filter(live_cap, const_cast<char *>(m_config.filter.c_str()));
     this->linktype = pcap_datalink(live_cap);
-    pcap_loop(live_cap, 0, packet_handler, reinterpret_cast<u_char *>(this));
+    pcap_loop(live_cap, 0, packet_handler, reinterpret_cast<u_char*>(this));
     pcap_close(live_cap);
 }
 
@@ -22,7 +21,11 @@ void PCAPParser::packet_handler(u_char *user_data, const struct pcap_pkthdr *pac
         packet = reinterpret_cast<const uint8_t *>(packet) + LINUX_COOKED_HEADER_SIZE;
     }
 
-    pcp->perform_predict(packet);
+    auto sp = new  SuperPacket((void *) packet, pcp->m_config.payload, pcp->linktype);
+
+    sp->get_bitstring(&(pcp->m_config), bitstring_vec);
+    PCAPParser::perform_predict(packet);
+    delete sp;
 
 }
 
@@ -91,35 +94,23 @@ void PCAPParser::perform_predict(const u_char *packet) {
     std::cout << "PCAPParser::perform_predict" << std::endl;
     std::ostringstream oss;
     // 将 vector 中的元素写入字符串流中，并以逗号分隔
-    for (auto it = bitstring_vec.begin(); it != bitstring_vec.end(); ++it) {
-        if (it != bitstring_vec.begin()) {
+
+    std::cout << PCAPParser::bitstring_vec.size() << std::endl;
+
+    for (int i = 0; i < PCAPParser::bitstring_vec.size(); ++i) {
+        if(i != 0) {
             oss << ",";
         }
-        oss << *it;
+        oss << PCAPParser::bitstring_vec[i];
     }
 
-    auto bitstring = oss.str().c_str();
+    std::cout << "数据包: " << oss.str().length() << std::endl;
 
-    std::cout << "数据包: " << oss.str().c_str() << std::endl;
+    auto bitstring = oss.str().c_str();
     std::string label;
     std::cout << "调Python" << std::endl;
 	CallPython::Method(bitstring, label);
     std::cout << "调完Python" << std::endl;
-
-#ifdef FUCK
-
-    //auto result = this->m_model_file->predict(inputs);
-
-	// FIXME
-    auto vec = std::vector<int>(); //result[0].as_vector();
-    auto values = vec.data();
-    size_t _size = vec.size(), index = 0;
-    float _max = values[index];
-    for (int i = 0; i < _size; ++i) {
-        if (_max >= values[i]) continue;
-        _max = values[i];
-        index = i;
-    }
 
 #pragma region 处理 MAC 地址
 //	struct ether_header *eth = (struct ether_header *)packet;
@@ -135,6 +126,8 @@ void PCAPParser::perform_predict(const u_char *packet) {
 //	printf("Destination MAC: %s\n", dst_mac);
 #pragma endregion
 
+#define FUCK
+#ifdef FUCK
 #pragma region 处理 IP 地址
 
     auto ip = (struct iphdr *) (packet + sizeof(struct ether_header));
@@ -145,7 +138,7 @@ void PCAPParser::perform_predict(const u_char *packet) {
 
     std::cout << " |" << PCAPParser::get_protocol_name((u_char*)packet)
               << " |  Source IP: " << src_ip << " -> "
-              << labels[index]
+              << label
               << " -> Destination IP: " << dst_ip << std::endl;
 #endif
 }
@@ -191,4 +184,11 @@ std::string PCAPParser::get_protocol_name(u_char *packet) {
         }
     }
     return "NaP";
+}
+
+SuperPacket *PCAPParser::process_packet(void *packet) {
+
+
+        return new SuperPacket(packet, this->m_config.payload, this->linktype);
+
 }
