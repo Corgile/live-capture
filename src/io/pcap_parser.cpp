@@ -1,4 +1,6 @@
 #include "pcap_parser.hpp"
+#include <iostream>
+#include <python3.7m/Python.h>
 
 
 void PCAPParser::perform() {
@@ -77,10 +79,14 @@ PCAPParser::PCAPParser(Config config, FileWriter file_writer)
                 + SIZE_ICMP_HEADER_BITSTRING;
     to_fill.reserve(size << 5);
     this->linktype = -1;
-    this->m_model_file = nullptr;
 }
 
 void PCAPParser::perform_predict(const u_char *packet) {
+
+	Py_Initialize();
+	PyRun_SimpleString("print('Hello World')");
+	Py_Finalize();
+	return;
 
     std::vector<int> most_important_indices = {
             1, 107, 231, 25, 109, 15, 233, 0, 2, 3, 235, 4,
@@ -115,16 +121,13 @@ void PCAPParser::perform_predict(const u_char *packet) {
         X[i] = float(samples[most_important_indices[i]]);
     }
 
-    const fdeep::tensor_shape shape{128, 1};
-    fdeep::tensor _input(shape, X);
 
-    const std::vector<fdeep::tensor> inputs{_input};
+    //auto result = this->m_model_file->predict(inputs);
 
-    auto result = this->m_model_file->predict(inputs);
-
-    auto vec = result[0].as_vector();
-    auto values = vec->data();
-    size_t _size = vec->size(), index = 0;
+	// FIXME
+    auto vec = std::vector<int>(); //result[0].as_vector();
+    auto values = vec.data();
+    size_t _size = vec.size(), index = 0;
     float _max = values[index];
     for (int i = 0; i < _size; ++i) {
         if (_max >= values[i]) continue;
@@ -147,6 +150,7 @@ void PCAPParser::perform_predict(const u_char *packet) {
 #pragma endregion
 
 #pragma region 处理 IP 地址
+
     auto ip = (struct iphdr *) (packet + sizeof(struct ether_header));
     char src_ip[INET_ADDRSTRLEN], dst_ip[INET_ADDRSTRLEN];
     inet_ntop(AF_INET, &(ip->saddr), src_ip, INET_ADDRSTRLEN);
@@ -159,9 +163,6 @@ void PCAPParser::perform_predict(const u_char *packet) {
               << " -> Destination IP: " << dst_ip << std::endl;
 }
 
-void PCAPParser::set_model(fdeep::model *_model) {
-    this->m_model_file = _model;
-}
 
 std::string PCAPParser::get_protocol_name(u_char *packet) {
     u_char *ip_data;
