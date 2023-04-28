@@ -40,5 +40,6 @@ Config Config::get_instance() {
 	config.set_payload(20);
 	// 20 bytes of payload
 	config.set_infile("");
+//	config.set_infile("/home/gzhuadmin/workspace/live-capture/target/192.168.8.68.pcapng");
 	return config;
 }

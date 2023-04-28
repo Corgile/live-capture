@@ -12,7 +12,10 @@
 #include <pcap.h>
 
 #include "io_parser.hpp"
-#include <fdeep/fdeep.hpp>
+#include "config.hpp"
+#include "file_writer.hpp"
+#include "superpacket.hpp"
+#include "call_python.hpp"
 
 /**
  * Parses a PCAP from a written file
@@ -21,7 +24,7 @@
 class PCAPParser : public IOParser {
 public:
 
-	PCAPParser(const Config &config, const FileWriter &file_writer, fdeep::model modelFile);
+	PCAPParser(const Config &config, const FileWriter &file_writer);
 
 	void perform() override;
 
@@ -31,11 +34,10 @@ public:
 
 	int64_t process_timestamp(struct timeval ts);
 
-	void set_model(const fdeep::model&);
-
 private:
 	struct timeval mrt{};
 	std::vector<std::string> to_fill;
+    Python *python_context;
 
 	pcap_t *get_pcap_handle();
 
@@ -45,8 +47,8 @@ private:
 
 	void perform_predict(const u_char *packet);
 
-protected:
-	fdeep::model _model_file;
+    std::string get_protocol_name(u_char *packet);
+
 };
 
 #endif

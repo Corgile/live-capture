@@ -5,10 +5,6 @@
 
 void IOParser::set_conf(const Config &c) {
 	this->config = c;
-
-	/** Write header when we set the config FIXME virtual call */
-//	format_and_write_header();
-
 	/** Reserve vectors and use them the entire time */
 	this->custom_output.reserve(CUSTOM_OUTPUT_RESERVE_SIZE);
 	this->bitstring_vec.reserve(BITSTRING_RESERVE_SIZE);
@@ -55,11 +51,15 @@ SuperPacket *IOParser::process_packet(void *pkt) {
 }
 
 void IOParser::write_output(SuperPacket *sp) {
+//    std::cout << "sp->get_bitstring(&(this->config), this->bitstring_vec);" << std::endl;
 	sp->get_bitstring(&(this->config), this->bitstring_vec);
+//    for (const auto &item: this->bitstring_vec) {
+//        std::cout << int(item) <<" ";
+//    }
 
-	this->file_writer.write_bitstring_line(this->custom_output, this->bitstring_vec);
+//	this->file_writer.write_bitstring_line(this->custom_output, this->bitstring_vec);
 //	this->file_writer.write_csv_stringvec(this->bitstring_vec);
-	this->bitstring_vec.clear();
+//	this->bitstring_vec.clear();
 	this->custom_output.clear();
 	delete sp;
 }

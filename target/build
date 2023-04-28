@@ -1,0 +1,15 @@
+#!/bin/bash
+
+sudo rm -rf src CMakeFiles/ CMakeCache.txt Makefile  cmake_install.cmake
+
+sudo make clean
+
+sudo rm -rf ./live-capture-$1
+
+sudo cmake -DWITH_BENIGN=$1 ..
+
+sudo make -j64
+
+sudo mv src/live-capture ./live-capture-$1
+
+sudo ./live-capture-$1

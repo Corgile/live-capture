@@ -42,7 +42,7 @@ public:
 
 	static void tokenize_line(const std::string &line, std::vector<std::string> &to_fill, char delimiter = ',');
 
-	const std::vector<int8_t>& get_bitstring_vec() const;
+	[[nodiscard]] const std::vector<int8_t>& get_bitstring_vec() const;
 
 protected:
 	Stats stat;
