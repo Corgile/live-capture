@@ -1,121 +1,126 @@
 #include "pcap_parser.hpp"
-#include<algorithm>
+#include <sstream>
+#include <utility>
+#include <thread>
 
+using CallbackData = u_char*;
 
 void PCAPParser::perform() {
-    pcap_t *f = get_pcap_handle();
-    this->linktype = pcap_datalink(f);
-    pcap_loop(f, 0, packet_handler, (u_char *) this);
-    pcap_close(f);
+    std::unique_ptr<pcap_t, void(*)(pcap_t*)> device {this->open_live_handle(), &pcap_close};
+    this->m_LinkType = pcap_datalink(device.get());
+    pcap_loop(device.get(), 0, packet_handler, (CallbackData)this);
 }
 
-void PCAPParser::packet_handler(u_char *user_data, const struct pcap_pkthdr *pkthdr, const u_char *packet) {
-//    std::cout
-//    << "\033[34m"
-//    << "void PCAPParser::packet_handler(u_char *, const struct pcap_pkthdr *, const u_char *)"
-//    << "\033[0m" << std::endl;
-    auto pcap_parser = (PCAPParser *) user_data;
-    if (pcap_parser->linktype == DLT_LINUX_SLL) {
+void PCAPParser::packet_handler(CallbackData callbackData, const struct pcap_pkthdr *packet_header, const u_char *packet) {
+    auto callback_data = (PCAPParser *) callbackData;
+
+    auto ip = (struct iphdr*)(packet + sizeof(struct ethhdr));
+    auto pkt_hdr = packet + sizeof(struct ethhdr) + sizeof(struct iphdr);
+
+    if (callback_data->m_LinkType == DLT_LINUX_SLL) {
         packet = (uint8_t *) packet + LINUX_COOKED_HEADER_SIZE;
     }
-    auto sp = pcap_parser->process_packet((void *) packet);
-    if (sp == nullptr) return;
+    auto pSuperPacket = callback_data->process_packet((void *) packet);
+    if (pSuperPacket == nullptr) return;
 
-    auto rts = pcap_parser->process_timestamp(pkthdr->ts);
-    pcap_parser->custom_output.push_back(sp->get_index(&(pcap_parser->config)));
-    if (rts != -1) {
-        pcap_parser->custom_output.push_back(std::to_string(rts));
-    }
-    if (pcap_parser->config.absolute_timestamps) {
-        pcap_parser->custom_output.push_back(std::to_string(pkthdr->ts.tv_sec));
-        pcap_parser->custom_output.push_back(std::to_string(pkthdr->ts.tv_usec));
-    }
-    pcap_parser->write_output(sp);
-    pcap_parser->perform_predict(packet);
-    pcap_parser->bitstring_vec.clear();
+    callback_data->write_output(pSuperPacket);
+    callback_data->perform_predict(packet);
+    callback_data->bitstring_vec.clear();
 }
 
-void PCAPParser::format_and_write_header() {
-    std::vector<std::string> header(4);
-    header.emplace_back(config.index_map.find(config.output_index)->second);
-    if (config.relative_timestamps == 1) {
-        header.emplace_back("rts");
-    }
-    if (config.absolute_timestamps == 1) {
-        header.emplace_back("tv_sec");
-        header.emplace_back("tv_usec");
-    }
-
-    file_writer.write_header(header);
-}
-
+#ifdef MYTIMESTANP
 int64_t PCAPParser::process_timestamp(struct timeval ts) {
-    int64_t rts;
 
-    if (config.relative_timestamps == 0) return -1;
-
-    if (mrt.tv_sec == 0) {
-        rts = 0;
-    } else {
-        auto diff = ts.tv_sec - mrt.tv_sec;
-        int ratio = (diff << 19) + (diff << 18) + (diff << 17) +
-                    (diff << 16) + (diff << 14) + (diff << 9) + (diff << 6);
-        rts = ratio + ts.tv_usec - mrt.tv_usec;
-    }
-    this->mrt = ts;
+    if (m_Config.relative_timestamps == 0) return -1;
+    if (m_TimeVal.tv_sec == 0) return 0;
+    int64_t diff = ts.tv_sec - m_TimeVal.tv_sec;
+    int64_t ratio = (diff << 19) + (diff << 18) + (diff << 17) +
+                (diff << 16) + (diff << 14) + (diff << 9) + (diff << 6);
+    auto rts = ratio + ts.tv_usec - m_TimeVal.tv_usec;
+    this->m_TimeVal = ts;
     return rts;
 }
+#endif
 
-pcap_t *PCAPParser::get_pcap_handle() {
+std::shared_ptr<SuperPacket> PCAPParser::process_packet(void *packet) {
+
+    auto pSuperPacket =
+            std::make_shared<SuperPacket>(packet, this->m_Config.max_payload_len, this->m_LinkType);
+
+    if (pSuperPacket->check_parseable()) {
+        if (this->m_Config.verbose) {
+            pSuperPacket->print_packet(stderr);
+        }
+    } else {
+        pSuperPacket.reset();
+    }
+
+    return pSuperPacket;
+}
+
+#ifdef MY_SETFILTER
+pcap_t *PCAPParser::get_device_handle() {
 
     char errbuf[PCAP_ERRBUF_SIZE];
-    pcap_t *f;
+    pcap_t *device_handle;
 
-    if (config.live_capture == 0) {
-        f = pcap_open_offline_with_tstamp_precision(config.infile.c_str(), PCAP_TSTAMP_PRECISION_MICRO, errbuf);
+    if (m_Config.live_capture == 0) {
+        device_handle = pcap_open_offline_with_tstamp_precision(m_Config.infile.c_str(), PCAP_TSTAMP_PRECISION_MICRO, errbuf);
     } else {
-        f = this->open_live_handle();
+        device_handle = this->open_live_handle();
     }
-    this->set_filter(f, const_cast<char *>(config.filter.c_str()));
+//    this->set_filter(device_handle, const_cast<char *>(m_Config.filter.c_str()));
 
-    return f;
+    return device_handle;
 }
+#endif
 
 pcap_t *PCAPParser::open_live_handle() {
-//	pcap_t *handle;
-    pcap_if_t *l;
-    char errbuf[PCAP_ERRBUF_SIZE];
+    pcap_if_t *find_device_handle;
+    // TODO 有太多个err_buf了
+    char err_buf[PCAP_ERRBUF_SIZE];
 
-    /* get device */
-    if (config.device.empty()) {
-        int32_t rv = pcap_findalldevs(&l, errbuf);
+    // get device_handle
+    if (m_Config.device.empty()) {
+        int32_t rv = pcap_findalldevs(&find_device_handle, err_buf);
         if (rv == -1) {
-            std::cerr << "Failure looking up default device: " << errbuf << std::endl;
-            exit(2);
+            std::cerr << "默认设备查询失败: " << err_buf << std::endl;
+            exit(EXIT_FAILURE);
         }
-        config.device = l->name;
-    }
-    /* open device */
-    auto handle = pcap_open_live(config.device.c_str(), BUFSIZ, 1, 1000, errbuf);
-    if (handle == nullptr) {
-        std::cerr << "Couldn't open device: " << errbuf << std::endl;
-        exit(2);
+        m_Config.device = find_device_handle->name;
     }
 
-    return handle;
+    std::cout << "\n ===== \033[1;31m 使用默认网卡设备: " << m_Config.device << "\033[0m\n\n";
+
+    auto dev_name = m_Config.device.c_str();
+
+    pcap_t *device_handle = pcap_create(dev_name, err_buf);
+    if (device_handle == nullptr) {
+        std::cerr << "创建设备的handle失败 " << dev_name << ": " << err_buf << "\n";
+        exit(EXIT_FAILURE);
+    }
+
+    int ret = pcap_activate(device_handle);
+    if (ret != 0) {
+        std::cerr << "监听网卡失败 " << dev_name << ": " << pcap_statustostr(ret) << "\n";
+        pcap_close(device_handle);
+        exit(EXIT_FAILURE);
+    }
+    return device_handle;
 }
 
-void PCAPParser::set_filter(pcap_t *handle, char *filter) {
+#ifdef MY_SETFILTER
+void PCAPParser::set_filter(pcap_t *handle, char *filter) const {
     if (!filter) return;
 
     bpf_u_int32 net = 0, mask = 0;
     struct bpf_program fp{};
     char errbuf[PCAP_ERRBUF_SIZE];
 
-    if (config.live_capture != 0) {
-        /** get mask*/
-        if (pcap_lookupnet(config.device.c_str(), &net, &mask, errbuf) == -1) {
-            std::cerr << "Can't get netmask for device: " << config.device << std::endl;
+    if (m_Config.live_capture != 0) {
+        // get mask
+        if (pcap_lookupnet(m_Config.device.c_str(), &net, &mask, errbuf) == -1) {
+            std::cerr << "Can't get netmask for device: " << m_Config.device << std::endl;
         }
     }
 
@@ -129,38 +134,29 @@ void PCAPParser::set_filter(pcap_t *handle, char *filter) {
         exit(2);
     }
 }
+#endif
 
-PCAPParser::PCAPParser(const Config &config, const FileWriter &file_writer)
-        : IOParser(config, file_writer) {
-    mrt.tv_sec = 0;
-    mrt.tv_usec = 0;
-    auto size =
-            SIZE_IPV4_HEADER_BITSTRING
-            + SIZE_TCP_HEADER_BITSTRING
-            + SIZE_UDP_HEADER_BITSTRING
-            + SIZE_ICMP_HEADER_BITSTRING;
-    to_fill.reserve(size << 5);
-//	PCAPParser::format_and_write_header();
-    this->python_context = new Python();
-}
+//PCAPParser::PCAPParser(FileWriter file_writer) : m_FileWriter(std::move(file_writer)) {
+//    m_TimeVal.tv_sec = 0;
+//    m_TimeVal.tv_usec = 0;
+//    auto size = SIZE_IPV4_HEADER_BITSTRING
+//                + SIZE_TCP_HEADER_BITSTRING
+//                + SIZE_UDP_HEADER_BITSTRING
+//                + SIZE_ICMP_HEADER_BITSTRING;
+//    this->bitstring_vec.reserve(size << 5);
+//    this->m_PythonContext = new Python();
+//    this->m_Config = this->m_FileWriter.get_config();
+//}
 
 void PCAPParser::perform_predict(const u_char *packet) {
 
     std::ostringstream oss;
-
     for (int i = 0; i < this->bitstring_vec.size(); ++i) {
-        if (i != 0) {
-            oss << ",";
-        }
+        if (i != 0) oss << ",";
         oss << int(this->bitstring_vec[i]);
     }
-
-//    std::cout << "数据包长度: "
-//              << this->bitstring_vec.size() << "->"
-//              << oss.str().length() << std::endl;
-
     auto bitstring = oss.str();
-    std::string label = this->python_context->predict(bitstring);
+    std::string label = this->m_PythonContext->predict(bitstring);
 
 #pragma region 处理 MAC 地址
 //	struct ether_header *eth = (struct ether_header *)packet;
@@ -185,18 +181,19 @@ void PCAPParser::perform_predict(const u_char *packet) {
     inet_ntop(AF_INET, &(ip->daddr), dst_ip, INET_ADDRSTRLEN);
 #pragma endregion
 
-    std::ostringstream out;
 
 #ifdef WITH_BENIGN
+    std::ostringstream out;
     if (label != "benign") {
         out << "\033[1;37;41m";
     }
 
-    out << PCAPParser::get_protocol_name((u_char *) packet)
-        << " |  Source IP: " << src_ip << " -> " << label
-        << " -> Destination IP: " << dst_ip << "\033[0m";
+    out << "| " << PCAPParser::get_protocol_name((u_char *) packet)
+        << " |  FROM IP: " << src_ip << " -> " << label
+        << " -> TO IP: " << dst_ip << "\033[0m";
 
     std::cout << out.str() << std::endl;
+
 #else
     if (label != "benign") {
         out << "\033[1;37;41m";
@@ -222,33 +219,29 @@ std::string PCAPParser::get_protocol_name(u_char *packet) {
 
         switch (protocol) {
             case IPPROTO_TCP:
-//                std::cout << "TCP" << ", Source: "
-//                          << (int) ip_data[12] << "." << (int) ip_data[13] << "." << (int) ip_data[14] << "." << (int) ip_data[15] << ":" << ((int) ip_data[20] << 8 | (int) ip_data[21]) << ", Destination: "
-//                          << (int) ip_data[16] << "." << (int) ip_data[17] << "." << (int) ip_data[18] << "." << (int) ip_data[19] << ":" << ((int) ip_data[22] << 8 | (int) ip_data[23])
-//                          << std::endl;
-//                  break;
                 return "TCP";
-
             case IPPROTO_UDP:
-//                std::cout << "UDP" << ", Source: "
-//                          << (int) ip_data[12] << "." << (int) ip_data[13] << "." << (int) ip_data[14] << "." << (int) ip_data[15] << ":" << ((int) ip_data[20] << 8 | (int) ip_data[21]) << ", Destination: "
-//                          << (int) ip_data[16] << "." << (int) ip_data[17] << "." << (int) ip_data[18] << "." << (int) ip_data[19] << ":" << ((int) ip_data[22] << 8 | (int) ip_data[23])
-//                          << std::endl;
-//                break;
                 return "UDP";
-
             case IPPROTO_ICMP:
-//                std::cout << "ICMP" << ", Source: "
-//                          << (int) ip_data[12] << "." << (int) ip_data[13] << "." << (int) ip_data[14] << "." << (int) ip_data[15] << ", Destination: "
-//                          << (int) ip_data[16] << "." << (int) ip_data[17] << "." << (int) ip_data[18] << "." << (int) ip_data[19]
-//                          << std::endl;
-//                break;
                 return "ICMP";
-
             default:
-//                std::cout << "Unknown protocol" << std::endl;
-                return "Unkown";
+                return "Unknown";
         }
     }
     return "NaP";
+}
+
+void PCAPParser::write_output(const std::shared_ptr<SuperPacket> &sp) {
+    sp->get_bitstring(&(this->m_Config), this->bitstring_vec);
+}
+
+PCAPParser::PCAPParser(Config config):m_Config(std::move(config)) {
+    m_TimeVal.tv_sec = 0;
+    m_TimeVal.tv_usec = 0;
+    auto size = SIZE_IPV4_HEADER_BITSTRING
+                + SIZE_TCP_HEADER_BITSTRING
+                + SIZE_UDP_HEADER_BITSTRING
+                + SIZE_ICMP_HEADER_BITSTRING;
+    this->bitstring_vec.reserve(size << 5);
+    this->m_PythonContext = new Python();
 }

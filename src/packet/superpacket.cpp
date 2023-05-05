@@ -2,8 +2,6 @@
 
 void SuperPacket::print_packet(FILE *out) {
     fprintf(out, "Superpacket {\n");
-    radiotap_header.print_header(out);
-    wlan_header.print_header(out);
     ethernet_header.print_header(out);
     ipv4_header.print_header(out);
     ipv6_header.print_header(out);
@@ -15,44 +13,28 @@ void SuperPacket::print_packet(FILE *out) {
 }
 
 SuperPacket::SuperPacket(void *pkt, uint32_t max_payload_len, uint32_t linktype) {
-    struct radiotap_header *radiotaph;
-    struct wlan_header * wlanh;
 
     struct ip *ipv4h;
     struct ether_header *eth;
 
-    parseable = true;
+    this->max_payload_len = max_payload_len;
+    eth = (struct ether_header *)pkt;
 
-    switch (linktype) {
-    case DLT_IEEE802_11_RADIO:
-        radiotaph = (struct radiotap_header *) pkt;
-        radiotap_header.set_raw(radiotaph);
+    /* Check if packet has an ethernet header */
+    if ((ntohs(eth->ether_type) == ETHERTYPE_IP) ||
+        ((ntohs(eth->ether_type) == 0x86DD))) {
+        ethernet_header.set_raw(eth);
+        ipv4h = (struct ip *)&eth[1];
+    } else {
+        ipv4h = (struct ip *)pkt;
+    }
 
-        wlanh = (struct wlan_header *)((u_char *)radiotaph + radiotap_header.get_header_len()); 
-        wlan_header.set_raw(wlanh);  
-        break;
-    
-    default:
-        this->max_payload_len = max_payload_len;
-        eth = (struct ether_header *)pkt;
-
-        /* Check if packet has an ethernet header */
-        if ((ntohs(eth->ether_type) == ETHERTYPE_IP) ||
-            ((ntohs(eth->ether_type) == 0x86DD))) {
-            ethernet_header.set_raw(eth);
-            ipv4h = (struct ip *)&eth[1];
-        } else {
-            ipv4h = (struct ip *)pkt;
-        }
-
-        if (ipv4h->ip_v == 4) {
-            parseable = process_v4((void *)ipv4h);
-        } else if (ipv4h->ip_v == 6) {
-            parseable = process_v6((void *)ipv4h);
-        } else {
-            parseable = false;
-        }
-        break;
+    if (ipv4h->ip_v == 4) {
+        parseable = process_v4((void *)ipv4h);
+    } else if (ipv4h->ip_v == 6) {
+        parseable = process_v6((void *)ipv4h);
+    } else {
+        parseable = false;
     }
 }
 
@@ -141,25 +123,21 @@ bool SuperPacket::process_v6(void *pkt) {
     return true;
 }
 
-void SuperPacket::get_bitstring(Config *c, std::vector<int8_t> &to_fill) {
-    if (c->radiotap == 1)
-        radiotap_header.get_bitstring(to_fill, c->fill_with);
-    if (c->wlan == 1)
-        radiotap_header.get_bitstring(to_fill, c->fill_with);
+void SuperPacket::get_bitstring(Config *c, std::vector<int8_t> &bit_string_vec) {
     if (c->eth == 1)
-        ethernet_header.get_bitstring(to_fill, c->fill_with);
+        ethernet_header.get_bitstring(bit_string_vec, c->fill_with);
     if (c->ipv4 == 1)
-        ipv4_header.get_bitstring(to_fill, c->fill_with);
+        ipv4_header.get_bitstring(bit_string_vec, c->fill_with);
     if (c->ipv6 == 1)
-        ipv6_header.get_bitstring(to_fill, c->fill_with);
+        ipv6_header.get_bitstring(bit_string_vec, c->fill_with);
     if (c->tcp == 1)
-        tcp_header.get_bitstring(to_fill, c->fill_with);
+        tcp_header.get_bitstring(bit_string_vec, c->fill_with);
     if (c->udp == 1)
-        udp_header.get_bitstring(to_fill, c->fill_with);
+        udp_header.get_bitstring(bit_string_vec, c->fill_with);
     if (c->icmp == 1)
-        icmp_header.get_bitstring(to_fill, c->fill_with);
-    if (c->payload != 0)
-        payload.get_bitstring(to_fill, c->fill_with);
+        icmp_header.get_bitstring(bit_string_vec, c->fill_with);
+    if (c->max_payload_len != 0)
+        payload.get_bitstring(bit_string_vec, c->fill_with);
 }
 
 std::string SuperPacket::get_index(Config *c) {
@@ -233,11 +211,7 @@ std::string SuperPacket::get_port(bool src) {
 }
 
 std::string SuperPacket::get_tx_mac_address() {
-	if (wlan_header.get_raw() != nullptr) {
-		return wlan_header.get_tx_mac();
-	} else {
-		return "nullptr";
-	}
+    return "nullptr";
 }
 
 std::tuple<uint8_t, uint8_t> SuperPacket::get_packet_type() {
@@ -257,6 +231,6 @@ std::tuple<uint8_t, uint8_t> SuperPacket::get_packet_type() {
 	return {network_layer, transport_layer};
 }
 
-bool SuperPacket::check_parseable()  {
+bool SuperPacket::check_parseable() const  {
 	return parseable;
 }

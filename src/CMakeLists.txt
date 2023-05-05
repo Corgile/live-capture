@@ -9,4 +9,4 @@ file(GLOB_RECURSE SRC_FILES ${CMAKE_CURRENT_SOURCE_DIR}/*.cpp)
 add_executable(${binary_target} ${SRC_FILES})
 
 target_compile_definitions(${binary_target} PRIVATE WITH_BENIGN)
-target_link_libraries(${binary_target} io packet libpcap.so.1.10.4 ${Python3_LIBRARIES})
+target_link_libraries(${binary_target} io packet libpcap.so.1.10.4 libpthread.so.0 ${Python3_LIBRARIES})

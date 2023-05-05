@@ -59,8 +59,6 @@ std::vector<std::string>
 FileWriter::build_bitstring_header(std::vector<std::string> header) {
 	uint32_t i, prefix_len;
 	Payload p;
-	RadiotapHeader r;
-	WlanHeader w;
 	EthHeader e;
 	IPv4Header v4;
 	IPv6Header v6;
@@ -72,12 +70,8 @@ FileWriter::build_bitstring_header(std::vector<std::string> header) {
 	prefix_len = header.size();
 
 	/* Need to inform the payload of the max len */
-	p.set_info(0, this->config.payload);
+	p.set_info(0, this->config.max_payload_len);
 
-	if (this->config.radiotap == 1)
-		r.get_bitstring_header(header);
-	if (this->config.wlan == 1)
-		w.get_bitstring_header(header);
 	if (this->config.eth == 1)
 		e.get_bitstring_header(header);
 	if (this->config.ipv4 == 1)
@@ -90,13 +84,13 @@ FileWriter::build_bitstring_header(std::vector<std::string> header) {
 		udp.get_bitstring_header(header);
 	if (this->config.icmp == 1)
 		icmp.get_bitstring_header(header);
-	if (this->config.payload != 0)
+	if (this->config.max_payload_len != 0)
 		p.get_bitstring_header(header);
 
 	for (i = 0; i < prefix_len; i++)
 		compressed_header.push_back(header[i]);
 
-	if (this->config.regex != "") {
+	if (!this->config.regex.empty()) {
 		std::regex str_regex(this->config.regex);
 		for (i = prefix_len; i < header.size(); i++) {
 			if (!regex_match(header[i], str_regex)) {
@@ -147,4 +141,8 @@ void FileWriter::write_bitstring_line(std::vector<std::string> &prefix,
 
 FileWriter::FileWriter(const Config &config) {
 	this->set_conf(config);
+}
+
+Config FileWriter::get_config() {
+    return this->config;
 }

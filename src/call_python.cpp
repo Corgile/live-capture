@@ -9,7 +9,7 @@ std::string Python::predict(const std::string &bit_string) {
 }
 
 PythonObject Python::_init_required_module() {
-    const char *pyDir = "/home/gzhuadmin/workspace/live-capture/target";
+    const char *pyDir = "/home/gzhuadmin/workspace/live-capture/target/";
     const char *module_name = "damn";
     //引入当前路径,否则下面模块不能正常导入
     char tempPath[256] = {};
@@ -18,6 +18,7 @@ PythonObject Python::_init_required_module() {
     PyRun_SimpleString("import numpy as np");
     PyRun_SimpleString("from keras.models import load_model");
     PyRun_SimpleString("sys.path.append('./')");
+//    PyRun_SimpleString("/usr/local/lib/python3.8/dist-packages/");
     PyRun_SimpleString(tempPath);
 
     PythonObject py_object(module) = PyImport_ImportModule(module_name);

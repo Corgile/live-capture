@@ -10,19 +10,19 @@
 class TCPHeader : public PacketHeader {
 public:
 	/* Required Functions */
-	void *get_raw();
+	void *get_raw() override;
 
-	void set_raw(void *raw_data);
+	void set_raw(void *raw_data) override;
 
-	void print_header(FILE *out);
+	void print_header(FILE *out) override;
 
-	uint32_t get_header_len();
+	uint32_t get_header_len() override;
 
 	std::string get_port(bool src);
 
-	void get_bitstring(std::vector<int8_t> &to_fill, int8_t fill_with);
+	void get_bitstring(std::vector<int8_t> &to_fill, int8_t fill_with) override;
 
-	void get_bitstring_header(std::vector<std::string> &to_fill);
+	void get_bitstring_header(std::vector<std::string> &to_fill) override;
 
 	/* Header Specific */
 private:

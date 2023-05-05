@@ -10,7 +10,6 @@
 #define py_function(x)      x
 #define py_module_dict(x)   x
 #define py_object(x)        x
-//#pragma comment(lib,"libpython3.8.so")
 
 using PythonObject = PyObject *;
 

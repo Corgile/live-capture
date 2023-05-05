@@ -2,16 +2,14 @@
 #define FILE_WRITER
 
 #include <regex>
-#include <errno.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
+#include <cerrno>
+#include <iostream>
+#include <cstdlib>
+#include <string>
 #include <sys/stat.h>
 #include <sys/types.h>
 
 #include "config.hpp"
-#include "radiotap_header.hpp"
-#include "wlan_header.hpp"
 #include "ethernet_header.hpp"
 #include "icmp_header.hpp"
 #include "ipv4_header.hpp"
@@ -37,9 +35,7 @@ public:
 
 	void write_bitstring_line(std::vector<std::string> &prefix, std::vector<int8_t> &bistring_vec);
 
-//	void write_fields_line(std::vector<std::string> &prefix, std::vector<std::string> &fields_vec);
-//
-//	void write_line(std::string &line);
+    Config get_config();
 
 private:
 	void recursive_mkdir(char *path);
@@ -51,7 +47,7 @@ private:
 
 	std::vector<std::string> build_bitstring_header(std::vector<std::string> header);
 
-	uint32_t payload_len;
+	uint32_t payload_len{};
 	FILE *outfile = nullptr;
 };
 

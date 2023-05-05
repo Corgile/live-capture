@@ -95,3 +95,28 @@ int main() {
 //    std::cin.get();
     return 0;
 }
+/*
+    switch (ip->protocol) {
+        case IPPROTO_TCP: {
+            auto tcp = (struct tcphdr*)pkt_hdr;
+            std::cout << " TCP : " << inet_ntoa(*(in_addr*)&ip->saddr) << ":" << ntohs(tcp->source);
+            std::cout << "->" << inet_ntoa(*(in_addr*)&ip->daddr) << ":" << ntohs(tcp->dest) << "\n";
+            break;
+        }
+        case IPPROTO_UDP: {
+            auto udp = (struct udphdr*)pkt_hdr;
+            std::cout << " UDP : " << inet_ntoa(*(in_addr*)&ip->saddr) << ":" << ntohs(udp->source);
+            std::cout << "->" << inet_ntoa(*(in_addr*)&ip->daddr) << ":" << ntohs(udp->dest) << "\n";
+            break;
+        }
+        case IPPROTO_ICMP: {
+            auto icmp = (struct icmphdr*)pkt_hdr;
+            std::cout << "ICMP("<<(int)icmp->type<<"): " << inet_ntoa(*(in_addr*)&ip->saddr);
+            std::cout << "->" << inet_ntoa(*(in_addr*)&ip->daddr) << "\n";
+            break;
+        }
+        default:
+            std::cout << "currently not supported protocol" << "\n";
+            break;
+    }
+*/

@@ -2,15 +2,14 @@
 #define SUPERPACKET
 
 #include <tuple>
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
+#include <iostream>
+#include <cstdlib>
+#include <string>
 #include <arpa/inet.h>
 #include <pcap.h>
 
 #include "config.hpp"
-#include "radiotap_header.hpp"
-#include "wlan_header.hpp"
+
 #include "ethernet_header.hpp"
 #include "icmp_header.hpp"
 #include "ipv4_header.hpp"
@@ -24,11 +23,11 @@ class SuperPacket {
     SuperPacket(void *pkt, uint32_t max_payload_len, uint32_t linktype);
     std::string get_port(bool src);
     std::string get_ip_address(bool src);
-    std::string get_tx_mac_address();
+    static std::string get_tx_mac_address();
     void print_packet(FILE *out);
-    bool check_parseable();
+    bool check_parseable() const;
     std::tuple<uint8_t, uint8_t> get_packet_type();
-    void get_bitstring(Config *c, std::vector<int8_t> &to_fill);
+    void get_bitstring(Config *c, std::vector<int8_t> &bit_string_vec);
     std::string get_index(Config *c);
 
   private:
@@ -37,8 +36,6 @@ class SuperPacket {
 
     bool parseable;
     uint32_t max_payload_len;
-    RadiotapHeader radiotap_header;
-    WlanHeader wlan_header;
     EthHeader ethernet_header;
     IPv4Header ipv4_header;
     IPv6Header ipv6_header;

@@ -12,7 +12,9 @@ int main(int argc, char **argv) {
 // TODO 使用选项参数实例化config
 	Config config = Config::get_instance();
 	FileWriter file_writer(config);
-	auto pcap_parser = new PCAPParser(config, file_writer);
+//	auto pcap_parser = new PCAPParser(file_writer);
+	auto pcap_parser = new PCAPParser(config);
+
 //	pcap_parser->set_model(model);
 	pcap_parser->perform();
 	delete pcap_parser;

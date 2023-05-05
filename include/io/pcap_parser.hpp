@@ -11,43 +11,58 @@
 
 #include <pcap.h>
 
-#include "io_parser.hpp"
 #include "config.hpp"
-#include "file_writer.hpp"
+//#include "file_writer.hpp"
 #include "superpacket.hpp"
 #include "call_python.hpp"
+#include <memory>
 
 /**
  * Parses a PCAP from a written file
  */
 
-class PCAPParser : public IOParser {
+class PCAPParser{//; : public IOParser {
 public:
 
-	PCAPParser(const Config &config, const FileWriter &file_writer);
+//	explicit PCAPParser(FileWriter file_writer);
+	explicit PCAPParser(Config config);
 
-	void perform() override;
+	void perform();
 
-	void format_and_write_header() override;
+//	void format_and_write_header();
 
-	static void packet_handler(u_char *user_data, const struct pcap_pkthdr *pkthdr, const u_char *packet);
+	static void packet_handler(u_char *user_data, const struct pcap_pkthdr *packet_header, const u_char *packet);
 
-	int64_t process_timestamp(struct timeval ts);
+//	int64_t process_timestamp(struct timeval ts);
+
+    std::shared_ptr<SuperPacket> process_packet(void *packet);
 
 private:
-	struct timeval mrt{};
-	std::vector<std::string> to_fill;
-    Python *python_context;
+	struct timeval m_TimeVal{};
+//	std::vector<std::string> to_fill;
+    Python *m_PythonContext;
 
-	pcap_t *get_pcap_handle();
+//	pcap_t *get_device_handle();
 
-	pcap_t *open_live_handle();
+	[[nodiscard]] pcap_t *open_live_handle();
 
-	void set_filter(pcap_t *handle, char *filter);
+//	void set_filter(pcap_t *handle, char *filter) const;
 
 	void perform_predict(const u_char *packet);
 
-    std::string get_protocol_name(u_char *packet);
+    static std::string get_protocol_name(u_char *packet);
+
+//    Stats m_Stat;
+    Config m_Config;
+//    FileWriter m_FileWriter;
+    uint32_t m_LinkType{};
+
+    void write_output(const std::shared_ptr<SuperPacket>& sp);
+    // static void signal_handler(int signum);
+
+    std::vector<std::string> custom_output;
+    std::vector<int8_t> bitstring_vec;
+    std::vector<std::string> fields_vec;
 
 };
 

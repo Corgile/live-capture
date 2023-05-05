@@ -1,23 +1,16 @@
 #include "config.hpp"
 
 Config::Config() {
-	this->radiotap = 0;
-	this->wlan = 0;
+
 	this->eth = 0;
 	this->ipv4 = 0;
 	this->ipv6 = 0;
 	this->tcp = 0;
 	this->udp = 0;
 	this->icmp = 0;
-	this->payload = 0;
-	this->fill_with = -1;
-	this->num_packets = 0;
-	this->absolute_timestamps = 0;
-	this->relative_timestamps = 0;
-	this->pcap = 0;
-	this->csv = 0;
-	this->stats = 0;
-	this->nprint = 0;
+	this->max_payload_len = 0;
+    this->relative_timestamps = 0;
+    this->fill_with = -1;
 	this->verbose = 0;
 	this->live_capture = 0;
 	this->output_index = 0;
@@ -36,7 +29,6 @@ Config Config::get_instance() {
 	config.set_tcp(true);
 	config.set_udp(true);
 	config.set_icmp(true);
-	config.set_stats(true);
 	config.set_payload(20);
 	// 20 bytes of payload
 	config.set_infile("");
