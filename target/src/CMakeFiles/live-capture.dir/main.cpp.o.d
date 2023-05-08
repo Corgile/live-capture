@@ -364,4 +364,8 @@ src/CMakeFiles/live-capture.dir/main.cpp.o: \
  /usr/include/python3.8/pyctype.h /usr/include/python3.8/pystrtod.h \
  /usr/include/python3.8/pystrcmp.h /usr/include/python3.8/dtoa.h \
  /usr/include/python3.8/fileutils.h /usr/include/python3.8/pyfpe.h \
- /usr/include/python3.8/tracemalloc.h
+ /usr/include/python3.8/tracemalloc.h \
+ /usr/local/include/rabbitmq-c/tcp_socket.h \
+ /usr/local/include/rabbitmq-c/amqp.h \
+ /usr/local/include/rabbitmq-c/export.h \
+ /usr/local/include/rabbitmq-c/framing.h

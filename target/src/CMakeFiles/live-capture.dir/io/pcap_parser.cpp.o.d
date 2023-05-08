@@ -318,7 +318,11 @@ src/CMakeFiles/live-capture.dir/io/pcap_parser.cpp.o: \
  /usr/include/c++/9/bits/atomic_lockfree_defines.h \
  /usr/include/c++/9/backward/auto_ptr.h \
  /usr/include/c++/9/pstl/glue_memory_defs.h \
- /usr/include/c++/9/pstl/execution_defs.h /usr/include/c++/9/sstream \
+ /usr/include/c++/9/pstl/execution_defs.h \
+ /usr/local/include/rabbitmq-c/tcp_socket.h \
+ /usr/local/include/rabbitmq-c/amqp.h \
+ /usr/local/include/rabbitmq-c/export.h \
+ /usr/local/include/rabbitmq-c/framing.h /usr/include/c++/9/sstream \
  /usr/include/c++/9/bits/sstream.tcc /usr/include/c++/9/thread \
  /usr/include/c++/9/chrono /usr/include/c++/9/ratio \
  /usr/include/c++/9/ctime /usr/include/c++/9/bits/parse_numbers.h

@@ -5,7 +5,6 @@ set(CMAKE_CXX_STANDARD 17)
 set(binary_target live-capture)
 
 find_package(Python3 COMPONENTS Interpreter Development REQUIRED)
-add_compile_definitions(WITH_BENIGN)
 
 message("Python3 可执行文件所在路径: ${Python3_EXECUTABLE}")
 message("Python3 头文件路径: ${Python3_INCLUDE_DIRS}")

@@ -3,19 +3,23 @@
 #include <utility>
 #include <thread>
 
-using CallbackData = u_char*;
+
+using CallbackData = u_char *;
 
 void PCAPParser::perform() {
-    std::unique_ptr<pcap_t, void(*)(pcap_t*)> device {this->open_live_handle(), &pcap_close};
-    this->m_LinkType = pcap_datalink(device.get());
-    pcap_loop(device.get(), 0, packet_handler, (CallbackData)this);
+    std::unique_ptr<pcap_t, void (*)(pcap_t *)> device{this->open_live_handle(), &pcap_close};
+    auto handle = device.get();
+    this->m_LinkType = pcap_datalink(handle);
+    pcap_set_promisc(handle, 1);
+    pcap_loop(handle, 0, packet_handler, (CallbackData) this);
 }
 
-void PCAPParser::packet_handler(CallbackData callbackData, const struct pcap_pkthdr *packet_header, const u_char *packet) {
+void
+PCAPParser::packet_handler(CallbackData callbackData, const struct pcap_pkthdr *packet_header, const u_char *packet) {
     auto callback_data = (PCAPParser *) callbackData;
 
-    auto ip = (struct iphdr*)(packet + sizeof(struct ethhdr));
-    auto pkt_hdr = packet + sizeof(struct ethhdr) + sizeof(struct iphdr);
+//    auto ip = (struct iphdr*)(packet + sizeof(struct ethhdr));
+//    auto pkt_hdr = packet + sizeof(struct ethhdr) + sizeof(struct iphdr);
 
     if (callback_data->m_LinkType == DLT_LINUX_SLL) {
         packet = (uint8_t *) packet + LINUX_COOKED_HEADER_SIZE;
@@ -172,8 +176,6 @@ void PCAPParser::perform_predict(const u_char *packet) {
 //	printf("Destination MAC: %s\n", dst_mac);
 #pragma endregion
 
-#define FUCK
-#ifdef FUCK
 #pragma region 处理 IP 地址
     auto ip = (struct iphdr *) (packet + sizeof(struct ether_header));
     char src_ip[INET_ADDRSTRLEN], dst_ip[INET_ADDRSTRLEN];
@@ -181,8 +183,6 @@ void PCAPParser::perform_predict(const u_char *packet) {
     inet_ntop(AF_INET, &(ip->daddr), dst_ip, INET_ADDRSTRLEN);
 #pragma endregion
 
-
-#ifdef WITH_BENIGN
     std::ostringstream out;
     if (label != "benign") {
         out << "\033[1;37;41m";
@@ -191,21 +191,18 @@ void PCAPParser::perform_predict(const u_char *packet) {
     out << "| " << PCAPParser::get_protocol_name((u_char *) packet)
         << " |  FROM IP: " << src_ip << " -> " << label
         << " -> TO IP: " << dst_ip << "\033[0m";
-
-    std::cout << out.str() << std::endl;
-
-#else
-    if (label != "benign") {
-        out << "\033[1;37;41m";
-         out << PCAPParser::get_protocol_name((u_char *) packet)
-        << " |  Source IP: " << src_ip << " -> " << label
-        << " -> Destination IP: " << dst_ip << "\033[0m";
-
+#define mq
+#ifdef mq
+//    if (label != "benign")
+    {
+//        this->publish_message(out.str().c_str());
         std::cout << out.str() << std::endl;
     }
-#endif
 
 #endif
+//#ifndef mq
+//#endif
+
 }
 
 std::string PCAPParser::get_protocol_name(u_char *packet) {
@@ -235,7 +232,28 @@ void PCAPParser::write_output(const std::shared_ptr<SuperPacket> &sp) {
     sp->get_bitstring(&(this->m_Config), this->bitstring_vec);
 }
 
-PCAPParser::PCAPParser(Config config):m_Config(std::move(config)) {
+PCAPParser::PCAPParser(Config config) : m_Config(std::move(config)) {
+    std::cout << "\n\n\t\033[31m =================== Init Captor Args ============\033[0m\n\n";
+    this->init_captor_args();
+    std::cout << "\n\n\t\033[31m =================== Load MQ Context ============\033[0m\n\n";
+    if(NOT this->load_mq_context()) exit(EXIT_FAILURE);
+    std::cout << "\n\n\t\033[31m =================== Load Python Context ============\n\n\033[0m";
+    this->m_PythonContext = new Python();
+}
+
+PCAPParser::~PCAPParser() {
+    this->cleanup_mq_transactions();
+    delete this->m_PythonContext;
+}
+
+void PCAPParser::cleanup_mq_transactions() {
+    // Cleanup and close connection
+    amqp_channel_close(state_buff, channel, AMQP_REPLY_SUCCESS);
+    amqp_connection_close(state_buff, AMQP_REPLY_SUCCESS);
+    amqp_destroy_connection(state_buff);
+}
+
+void PCAPParser::init_captor_args() {
     m_TimeVal.tv_sec = 0;
     m_TimeVal.tv_usec = 0;
     auto size = SIZE_IPV4_HEADER_BITSTRING
@@ -243,5 +261,126 @@ PCAPParser::PCAPParser(Config config):m_Config(std::move(config)) {
                 + SIZE_UDP_HEADER_BITSTRING
                 + SIZE_ICMP_HEADER_BITSTRING;
     this->bitstring_vec.reserve(size << 5);
-    this->m_PythonContext = new Python();
+}
+
+bool PCAPParser::init_connection() {
+    this->state_buff = amqp_new_connection();
+//    std::cout << "\033[36m >>>> " << __LINE__ << std::endl;
+//    amqp_response_type_enum status = amqp_get_rpc_reply(state_buff).reply_type;
+//    std::cout << "\033[36m >>>> " << __LINE__ << std::endl;
+//    std::string out(__PRETTY_FUNCTION__);
+//    std::cout << "\033[36m >>>> " << __LINE__ << std::endl;
+    return true;
+//    return PCAPParser::check_last_status(status, out);
+}
+
+bool PCAPParser::configure_socket() {
+    this->socket = amqp_tcp_socket_new(state_buff);
+    if (!socket) {
+        std::cout << "Error creating TCP socket\n";
+        return false;
+    }
+    return true;
+    amqp_response_type_enum status = amqp_get_rpc_reply(state_buff).reply_type;
+    std::string out(__PRETTY_FUNCTION__);
+    return PCAPParser::check_last_status(status, out);
+}
+
+bool PCAPParser::connect_to_server() {
+    if (amqp_socket_open(this->socket, "172.22.105.151", 5672)) {
+        std::cout << "Error connecting to RabbitMQ server\n";
+        return false;
+    }
+    return true;
+    amqp_response_type_enum status = amqp_get_rpc_reply(state_buff).reply_type;
+    std::string out(__PRETTY_FUNCTION__);
+    return PCAPParser::check_last_status(status, out);
+}
+
+bool PCAPParser::login() {
+    // Login
+    amqp_login(state_buff, "/",
+               0,
+               131072,
+               0,
+               amqp_sasl_method_enum::AMQP_SASL_METHOD_PLAIN,
+               "user", "password");
+//    amqp_response_type_enum status = amqp_get_rpc_reply(state_buff).reply_type;
+//    std::string out(__PRETTY_FUNCTION__);
+//    bool login_succeed = PCAPParser::check_last_status(status, out);
+//    if (!login_succeed) {
+//        std::cout << "login failed!\n";
+//        return false;
+//    }
+    amqp_channel_open(state_buff, 1);
+    return true;
+//    status = amqp_get_rpc_reply(state_buff).reply_type;
+//    return PCAPParser::check_last_status(status, out);
+}
+
+bool PCAPParser::declare_queue() {
+    // Declare queue
+    amqp_queue_declare_ok_t *res = amqp_queue_declare(state_buff, channel, queue,
+                                                      0,
+                                                      true, 0, 1, amqp_empty_table);
+    queue = amqp_bytes_malloc_dup(res->queue);
+    if (queue.bytes == nullptr) {
+        std::cout << "Error duplicating queue name\n";
+        return false;
+    }
+    return true;
+}
+
+
+bool PCAPParser::bind_queue_to_exchange() {
+    // Bind queue to exchange
+    auto arguments = amqp_empty_table;
+    amqp_queue_bind(state_buff, channel, queue, exchange, routing_key, arguments);
+    return true;
+    auto status = amqp_get_rpc_reply(state_buff).reply_type;
+    std::string out(__PRETTY_FUNCTION__);
+    return PCAPParser::check_last_status(status, out);
+}
+
+bool PCAPParser::publish_message(const char *message) {
+    // Publish message
+    amqp_bytes_t body = amqp_str(message);
+    amqp_basic_publish(state_buff, channel, exchange, routing_key, 0, 0, &(this->properties), body);
+    return true;
+    auto status = amqp_get_rpc_reply(state_buff).reply_type;
+    std::string out(__PRETTY_FUNCTION__);
+    return PCAPParser::check_last_status(status, out);
+}
+
+bool PCAPParser::load_mq_context() {
+    if (NOT this->init_connection()) return false;
+    if (NOT this->configure_socket()) return false;
+    if (NOT this->connect_to_server()) return false;
+    if (NOT this->login()) return false;
+    if (NOT this->declare_queue()) return false;
+    if (NOT this->bind_queue_to_exchange()) return false;
+    return true;
+}
+
+bool PCAPParser::check_last_status(amqp_response_type_enum status, std::string &out) {
+    bool ret = false;
+    switch (status) {
+        case AMQP_RESPONSE_NORMAL:
+            out += "\u001B[36m response normal, the RPC completed successfully033[0m\n";
+            ret = true;
+        case AMQP_RESPONSE_NONE:
+            out += "\u001B[31m last operation got AMQP_RESPONSE_NONE，the library got an EOF from the socket\033[0m\n";
+            break;
+        case AMQP_RESPONSE_LIBRARY_EXCEPTION:
+            out += "\u001B[31m last operation got an error occurred in the library\u001B[0m\n";
+            break;
+        case AMQP_RESPONSE_SERVER_EXCEPTION:
+            out += "\u001B[31m last operation got an server exception, the broker returned an error\u001B[0m\n";
+            break;
+        default:
+            out += "\u001B[31m last operation got an unknown error \u001B[0m\n";
+            break;
+    }
+    std::cout << out << std::endl;
+    return ret;
 }

@@ -16,53 +16,77 @@
 #include "superpacket.hpp"
 #include "call_python.hpp"
 #include <memory>
+#include <rabbitmq-c/tcp_socket.h>
+#include <rabbitmq-c/amqp.h>
+#define amqp_str amqp_cstring_bytes
+#define NOT !
 
 /**
  * Parses a PCAP from a written file
  */
 
-class PCAPParser{//; : public IOParser {
+class PCAPParser {
 public:
 
-//	explicit PCAPParser(FileWriter file_writer);
 	explicit PCAPParser(Config config);
+    ~PCAPParser();
 
 	void perform();
 
-//	void format_and_write_header();
+private:
+
+	void init_captor_args();
 
 	static void packet_handler(u_char *user_data, const struct pcap_pkthdr *packet_header, const u_char *packet);
 
-//	int64_t process_timestamp(struct timeval ts);
-
-    std::shared_ptr<SuperPacket> process_packet(void *packet);
-
-private:
-	struct timeval m_TimeVal{};
-//	std::vector<std::string> to_fill;
-    Python *m_PythonContext;
-
-//	pcap_t *get_device_handle();
-
 	[[nodiscard]] pcap_t *open_live_handle();
 
-//	void set_filter(pcap_t *handle, char *filter) const;
+	std::shared_ptr<SuperPacket> process_packet(void *packet);
 
 	void perform_predict(const u_char *packet);
 
     static std::string get_protocol_name(u_char *packet);
 
-//    Stats m_Stat;
-    Config m_Config;
-//    FileWriter m_FileWriter;
-    uint32_t m_LinkType{};
-
     void write_output(const std::shared_ptr<SuperPacket>& sp);
-    // static void signal_handler(int signum);
 
-    std::vector<std::string> custom_output;
-    std::vector<int8_t> bitstring_vec;
-    std::vector<std::string> fields_vec;
+	//=========== Publish MQ =============
+	bool load_mq_context();
+
+	bool init_connection();
+	bool configure_socket();
+	bool connect_to_server();
+	bool login();
+	bool declare_queue();
+	bool bind_queue_to_exchange();
+	bool publish_message(const char*);
+	void cleanup_mq_transactions();
+
+	static bool check_last_status(amqp_response_type_enum, std::string&);
+
+
+
+protected:
+
+	struct timeval m_TimeVal{};
+	std::vector<int8_t> bitstring_vec;
+	Config m_Config;
+	uint32_t m_LinkType{};
+
+	// ===============  Prediction  ===============
+	Python *m_PythonContext;
+	// ===============  Publish MQ  ===============
+	amqp_socket_t *socket;
+    amqp_connection_state_t state_buff{};
+    amqp_bytes_t queue = amqp_cstring_bytes("test");
+    const amqp_channel_t channel = 1;
+    const amqp_bytes_t routing_key = amqp_cstring_bytes("attack");
+    const amqp_bytes_t exchange = amqp_cstring_bytes("attackAlarmExchange");
+	const amqp_basic_properties_t properties {
+			._flags= AMQP_BASIC_CONTENT_TYPE_FLAG | AMQP_BASIC_DELIVERY_MODE_FLAG,
+			.content_type = amqp_str("text/plain"),
+			// persistent delivery mode
+			.delivery_mode = 2
+	};
 
 };
 
