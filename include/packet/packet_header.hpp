@@ -34,7 +34,7 @@ public:
 	static void ascii_encode(unsigned char *ptr, uint32_t num_bytes,
 	                         std::vector<std::string> &to_fill);
 
-	static void make_bitstring(uint32_t num_bytes, void *ptr,
+	static void make_bitstring(uint32_t num_bytes, void *raw_data,
 	                           std::vector<int8_t> &to_fill,
 	                           int8_t fill_with = 0);
 

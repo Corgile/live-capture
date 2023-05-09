@@ -11,13 +11,19 @@
 
 #include <pcap.h>
 
-#include "config.hpp"
-//#include "file_writer.hpp"
-#include "superpacket.hpp"
-#include "call_python.hpp"
+#include <arpa/inet.h>
+#include <netinet/ip.h>
+#include <netinet/tcp.h>
+#include <netinet/udp.h>
+#include <netinet/ip_icmp.h>
+#include <net/ethernet.h>
+
 #include <memory>
 #include <rabbitmq-c/tcp_socket.h>
 #include <rabbitmq-c/amqp.h>
+#include "config.hpp"
+#include "superpacket.hpp"
+#include "call_python.hpp"
 #define amqp_str amqp_cstring_bytes
 #define NOT !
 

@@ -2,29 +2,34 @@
 #include <sstream>
 #include <utility>
 #include <thread>
+#include <spdlog/spdlog.h>
 
 
 using CallbackData = u_char *;
+char err_buf[PCAP_ERRBUF_SIZE];
 
 void PCAPParser::perform() {
-    std::unique_ptr<pcap_t, void (*)(pcap_t *)> device{this->open_live_handle(), &pcap_close};
-    auto handle = device.get();
-    this->m_LinkType = pcap_datalink(handle);
-    pcap_set_promisc(handle, 1);
-    pcap_loop(handle, 0, packet_handler, (CallbackData) this);
+    std::unique_ptr<pcap_t, void (*)(pcap_t *)> handle{this->open_live_handle(), &pcap_close};
+    auto device = handle.get();
+    this->m_LinkType = pcap_datalink(device);
+    pcap_set_promisc(device, 1);
+    pcap_loop(device, 0, packet_handler, (CallbackData) this);
 }
 
 void
 PCAPParser::packet_handler(CallbackData callbackData, const struct pcap_pkthdr *packet_header, const u_char *packet) {
+    struct vlan_hdr {
+        uint32_t v1;
+    };
+    auto ethernet_header = (struct ether_header *) packet;
+    if (ntohs(ethernet_header->ether_type) == ETHERTYPE_VLAN) {
+        packet = (u_char *) (packet + sizeof(struct vlan_hdr));
+    }
     auto callback_data = (PCAPParser *) callbackData;
-
-//    auto ip = (struct iphdr*)(packet + sizeof(struct ethhdr));
-//    auto pkt_hdr = packet + sizeof(struct ethhdr) + sizeof(struct iphdr);
-
     if (callback_data->m_LinkType == DLT_LINUX_SLL) {
         packet = (uint8_t *) packet + LINUX_COOKED_HEADER_SIZE;
     }
-    auto pSuperPacket = callback_data->process_packet((void *) packet);
+    std::shared_ptr<SuperPacket> pSuperPacket = callback_data->process_packet((void *) packet);
     if (pSuperPacket == nullptr) return;
 
     callback_data->write_output(pSuperPacket);
@@ -32,23 +37,9 @@ PCAPParser::packet_handler(CallbackData callbackData, const struct pcap_pkthdr *
     callback_data->bitstring_vec.clear();
 }
 
-#ifdef MYTIMESTANP
-int64_t PCAPParser::process_timestamp(struct timeval ts) {
-
-    if (m_Config.relative_timestamps == 0) return -1;
-    if (m_TimeVal.tv_sec == 0) return 0;
-    int64_t diff = ts.tv_sec - m_TimeVal.tv_sec;
-    int64_t ratio = (diff << 19) + (diff << 18) + (diff << 17) +
-                (diff << 16) + (diff << 14) + (diff << 9) + (diff << 6);
-    auto rts = ratio + ts.tv_usec - m_TimeVal.tv_usec;
-    this->m_TimeVal = ts;
-    return rts;
-}
-#endif
-
 std::shared_ptr<SuperPacket> PCAPParser::process_packet(void *packet) {
 
-    auto pSuperPacket =
+    std::shared_ptr<SuperPacket> pSuperPacket =
             std::make_shared<SuperPacket>(packet, this->m_Config.max_payload_len, this->m_LinkType);
 
     if (pSuperPacket->check_parseable()) {
@@ -62,28 +53,9 @@ std::shared_ptr<SuperPacket> PCAPParser::process_packet(void *packet) {
     return pSuperPacket;
 }
 
-#ifdef MY_SETFILTER
-pcap_t *PCAPParser::get_device_handle() {
-
-    char errbuf[PCAP_ERRBUF_SIZE];
-    pcap_t *device_handle;
-
-    if (m_Config.live_capture == 0) {
-        device_handle = pcap_open_offline_with_tstamp_precision(m_Config.infile.c_str(), PCAP_TSTAMP_PRECISION_MICRO, errbuf);
-    } else {
-        device_handle = this->open_live_handle();
-    }
-//    this->set_filter(device_handle, const_cast<char *>(m_Config.filter.c_str()));
-
-    return device_handle;
-}
-#endif
 
 pcap_t *PCAPParser::open_live_handle() {
     pcap_if_t *find_device_handle;
-    // TODO 有太多个err_buf了
-    char err_buf[PCAP_ERRBUF_SIZE];
-
     // get device_handle
     if (m_Config.device.empty()) {
         int32_t rv = pcap_findalldevs(&find_device_handle, err_buf);
@@ -94,22 +66,16 @@ pcap_t *PCAPParser::open_live_handle() {
         m_Config.device = find_device_handle->name;
     }
 
-    std::cout << "\n ===== \033[1;31m 使用默认网卡设备: " << m_Config.device << "\033[0m\n\n";
+    std::cout << "\n ===== \033[1;31m 使用默认网卡: " << m_Config.device << "\033[0m\n\n";
 
-    auto dev_name = m_Config.device.c_str();
-
-    pcap_t *device_handle = pcap_create(dev_name, err_buf);
-    if (device_handle == nullptr) {
-        std::cerr << "创建设备的handle失败 " << dev_name << ": " << err_buf << "\n";
-        exit(EXIT_FAILURE);
-    }
-
-    int ret = pcap_activate(device_handle);
-    if (ret != 0) {
-        std::cerr << "监听网卡失败 " << dev_name << ": " << pcap_statustostr(ret) << "\n";
-        pcap_close(device_handle);
-        exit(EXIT_FAILURE);
-    }
+    const char *dev_name = m_Config.device.c_str();
+    struct bpf_program fp;
+    char filter_exp[] = "tcp or udp or icmp";
+    bpf_u_int32 net, mask;
+    pcap_t *device_handle = pcap_open_live(dev_name, BUFSIZ, 1, 1000, err_buf);
+    pcap_lookupnet(dev_name, &net, &mask, err_buf);
+    pcap_compile(device_handle, &fp, filter_exp, 0, net);
+    pcap_setfilter(device_handle, &fp);
     return device_handle;
 }
 
@@ -140,20 +106,32 @@ void PCAPParser::set_filter(pcap_t *handle, char *filter) const {
 }
 #endif
 
-//PCAPParser::PCAPParser(FileWriter file_writer) : m_FileWriter(std::move(file_writer)) {
-//    m_TimeVal.tv_sec = 0;
-//    m_TimeVal.tv_usec = 0;
-//    auto size = SIZE_IPV4_HEADER_BITSTRING
-//                + SIZE_TCP_HEADER_BITSTRING
-//                + SIZE_UDP_HEADER_BITSTRING
-//                + SIZE_ICMP_HEADER_BITSTRING;
-//    this->bitstring_vec.reserve(size << 5);
-//    this->m_PythonContext = new Python();
-//    this->m_Config = this->m_FileWriter.get_config();
-//}
+PCAPParser::PCAPParser(Config config) : m_Config(std::move(config)) {
+    std::cout << "\n\t\033[31m =================== Init Captor Args ============\033[0m\n";
+    this->init_captor_args();
+    //    std::cout << "\n\t\033[31m =================== Load MQ Context ============\033[0m\n";
+    //    if (NOT this->load_mq_context()) exit(EXIT_FAILURE);
+    std::cout << "\n\t\033[31m =================== Load Python Context ============\n\033[0m";
+    this->m_PythonContext = new Python();
+}
+
+PCAPParser::~PCAPParser() {
+    this->cleanup_mq_transactions();
+    delete this->m_PythonContext;
+}
 
 void PCAPParser::perform_predict(const u_char *packet) {
-
+    auto ethernet_header = (struct ether_header *) packet;
+    //    std::cout << "ntohs(ethernet_header->ether_type) != ETHERTYPE_IP" << std::endl;
+    //    if (ntohs(ethernet_header->ether_type) != ETHERTYPE_IP) return;
+    //    std::cout << "ntohs(ethernet_header->ether_type) == ETHERTYPE_IP" << std::endl;
+#pragma region 处理 IP 地址
+    auto ip_header = (struct iphdr *) (packet + sizeof(struct ether_header));
+    char src_ip[INET_ADDRSTRLEN];
+    char dst_ip[INET_ADDRSTRLEN];
+    inet_ntop(AF_INET, &(ip_header->saddr), src_ip, INET_ADDRSTRLEN);
+    inet_ntop(AF_INET, &(ip_header->daddr), dst_ip, INET_ADDRSTRLEN);
+#pragma endregion
     std::ostringstream oss;
     for (int i = 0; i < this->bitstring_vec.size(); ++i) {
         if (i != 0) oss << ",";
@@ -162,30 +140,9 @@ void PCAPParser::perform_predict(const u_char *packet) {
     auto bitstring = oss.str();
     std::string label = this->m_PythonContext->predict(bitstring);
 
-#pragma region 处理 MAC 地址
-//	struct ether_header *eth = (struct ether_header *)packet;
-//	char src_mac[18], dst_mac[18];
-//	sprintf(src_mac, "%02x:%02x:%02x:%02x:%02x:%02x",
-//	        eth->ether_shost[0], eth->ether_shost[1], eth->ether_shost[2],
-//	        eth->ether_shost[3], eth->ether_shost[4], eth->ether_shost[5]);
-//
-//	sprintf(dst_mac, "%02x:%02x:%02x:%02x:%02x:%02x",
-//	        eth->ether_dhost[0], eth->ether_dhost[1], eth->ether_dhost[2],
-//	        eth->ether_dhost[3], eth->ether_dhost[4], eth->ether_dhost[5]);
-//	printf("Source MAC: %s\n", src_mac);
-//	printf("Destination MAC: %s\n", dst_mac);
-#pragma endregion
-
-#pragma region 处理 IP 地址
-    auto ip = (struct iphdr *) (packet + sizeof(struct ether_header));
-    char src_ip[INET_ADDRSTRLEN], dst_ip[INET_ADDRSTRLEN];
-    inet_ntop(AF_INET, &(ip->saddr), src_ip, INET_ADDRSTRLEN);
-    inet_ntop(AF_INET, &(ip->daddr), dst_ip, INET_ADDRSTRLEN);
-#pragma endregion
-
     std::ostringstream out;
     if (label != "benign") {
-        out << "\033[1;37;41m";
+        out << "\033[31m";
     }
 
     out << "| " << PCAPParser::get_protocol_name((u_char *) packet)
@@ -193,57 +150,35 @@ void PCAPParser::perform_predict(const u_char *packet) {
         << " -> TO IP: " << dst_ip << "\033[0m";
 #define mq
 #ifdef mq
-//    if (label != "benign")
-    {
-//        this->publish_message(out.str().c_str());
-        std::cout << out.str() << std::endl;
-    }
+    //    if (label != "benign") {
+    // this->publish_message(out.str().c_str());
+    std::cout << out.str() << std::endl;
+    //    }
 
 #endif
-//#ifndef mq
-//#endif
+    //#ifndef mq
+    //#endif
 
 }
 
 std::string PCAPParser::get_protocol_name(u_char *packet) {
-    u_char *ip_data;
-    u_char protocol;
-    auto ether_header = (u_char *) packet;
-    int ether_type = ((int) ether_header[12] << 8) + ether_header[13];
-    if (ether_type == 0x0800) { // IPv4 数据报
-        ip_data = (u_char *) (packet) + 14;
-        protocol = ip_data[9];
+    u_char *ip_data = (u_char *) (packet) + 14;;
+    u_char protocol = ip_data[9];
 
-        switch (protocol) {
-            case IPPROTO_TCP:
-                return "TCP";
-            case IPPROTO_UDP:
-                return "UDP";
-            case IPPROTO_ICMP:
-                return "ICMP";
-            default:
-                return "Unknown";
-        }
+    switch (protocol) {
+        case IPPROTO_TCP:
+            return "TCP";
+        case IPPROTO_UDP:
+            return "UDP";
+        case IPPROTO_ICMP:
+            return "ICMP";
+        default:
+            return std::to_string(protocol);
     }
-    return "NaP";
 }
 
 void PCAPParser::write_output(const std::shared_ptr<SuperPacket> &sp) {
     sp->get_bitstring(&(this->m_Config), this->bitstring_vec);
-}
-
-PCAPParser::PCAPParser(Config config) : m_Config(std::move(config)) {
-    std::cout << "\n\n\t\033[31m =================== Init Captor Args ============\033[0m\n\n";
-    this->init_captor_args();
-    std::cout << "\n\n\t\033[31m =================== Load MQ Context ============\033[0m\n\n";
-    if(NOT this->load_mq_context()) exit(EXIT_FAILURE);
-    std::cout << "\n\n\t\033[31m =================== Load Python Context ============\n\n\033[0m";
-    this->m_PythonContext = new Python();
-}
-
-PCAPParser::~PCAPParser() {
-    this->cleanup_mq_transactions();
-    delete this->m_PythonContext;
 }
 
 void PCAPParser::cleanup_mq_transactions() {
@@ -265,13 +200,13 @@ void PCAPParser::init_captor_args() {
 
 bool PCAPParser::init_connection() {
     this->state_buff = amqp_new_connection();
-//    std::cout << "\033[36m >>>> " << __LINE__ << std::endl;
-//    amqp_response_type_enum status = amqp_get_rpc_reply(state_buff).reply_type;
-//    std::cout << "\033[36m >>>> " << __LINE__ << std::endl;
-//    std::string out(__PRETTY_FUNCTION__);
-//    std::cout << "\033[36m >>>> " << __LINE__ << std::endl;
+    //    std::cout << "\033[36m >>>> " << __LINE__ << std::endl;
+    //    amqp_response_type_enum status = amqp_get_rpc_reply(state_buff).reply_type;
+    //    std::cout << "\033[36m >>>> " << __LINE__ << std::endl;
+    //    std::string out(__PRETTY_FUNCTION__);
+    //    std::cout << "\033[36m >>>> " << __LINE__ << std::endl;
     return true;
-//    return PCAPParser::check_last_status(status, out);
+    //    return PCAPParser::check_last_status(status, out);
 }
 
 bool PCAPParser::configure_socket() {
@@ -305,17 +240,17 @@ bool PCAPParser::login() {
                0,
                amqp_sasl_method_enum::AMQP_SASL_METHOD_PLAIN,
                "user", "password");
-//    amqp_response_type_enum status = amqp_get_rpc_reply(state_buff).reply_type;
-//    std::string out(__PRETTY_FUNCTION__);
-//    bool login_succeed = PCAPParser::check_last_status(status, out);
-//    if (!login_succeed) {
-//        std::cout << "login failed!\n";
-//        return false;
-//    }
+    //    amqp_response_type_enum status = amqp_get_rpc_reply(state_buff).reply_type;
+    //    std::string out(__PRETTY_FUNCTION__);
+    //    bool login_succeed = PCAPParser::check_last_status(status, out);
+    //    if (!login_succeed) {
+    //        std::cout << "login failed!\n";
+    //        return false;
+    //    }
     amqp_channel_open(state_buff, 1);
     return true;
-//    status = amqp_get_rpc_reply(state_buff).reply_type;
-//    return PCAPParser::check_last_status(status, out);
+    //    status = amqp_get_rpc_reply(state_buff).reply_type;
+    //    return PCAPParser::check_last_status(status, out);
 }
 
 bool PCAPParser::declare_queue() {
@@ -330,7 +265,6 @@ bool PCAPParser::declare_queue() {
     }
     return true;
 }
-
 
 bool PCAPParser::bind_queue_to_exchange() {
     // Bind queue to exchange

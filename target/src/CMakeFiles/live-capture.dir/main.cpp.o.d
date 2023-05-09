@@ -258,7 +258,10 @@ src/CMakeFiles/live-capture.dir/main.cpp.o: \
  /usr/include/x86_64-linux-gnu/bits/types/sigevent_t.h \
  /usr/include/x86_64-linux-gnu/bits/types/__sigval_t.h \
  /usr/include/x86_64-linux-gnu/bits/netdb.h /usr/local/include/pcap/bpf.h \
- /usr/local/include/pcap/dlt.h \
+ /usr/local/include/pcap/dlt.h /usr/local/include/rabbitmq-c/tcp_socket.h \
+ /usr/local/include/rabbitmq-c/amqp.h \
+ /usr/local/include/rabbitmq-c/export.h \
+ /usr/local/include/rabbitmq-c/framing.h \
  /home/gzhuadmin/workspace/live-capture/include/packet/superpacket.hpp \
  /home/gzhuadmin/workspace/live-capture/include/packet/ethernet_header.hpp \
  /home/gzhuadmin/workspace/live-capture/include/packet/icmp_header.hpp \
@@ -364,8 +367,4 @@ src/CMakeFiles/live-capture.dir/main.cpp.o: \
  /usr/include/python3.8/pyctype.h /usr/include/python3.8/pystrtod.h \
  /usr/include/python3.8/pystrcmp.h /usr/include/python3.8/dtoa.h \
  /usr/include/python3.8/fileutils.h /usr/include/python3.8/pyfpe.h \
- /usr/include/python3.8/tracemalloc.h \
- /usr/local/include/rabbitmq-c/tcp_socket.h \
- /usr/local/include/rabbitmq-c/amqp.h \
- /usr/local/include/rabbitmq-c/export.h \
- /usr/local/include/rabbitmq-c/framing.h
+ /usr/include/python3.8/tracemalloc.h

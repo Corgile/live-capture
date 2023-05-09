@@ -16,20 +16,20 @@ void PacketHeader::ascii_encode(unsigned char *ptr, uint32_t num_bytes,
 	delete s;
 }
 
-void PacketHeader::make_bitstring(uint32_t num_bytes, void *ptr,
+void PacketHeader::make_bitstring(uint32_t num_bytes, void *raw_data,
                                   std::vector<int8_t> &to_fill,
                                   int8_t fill_with) {
 	uint8_t *byte, bit;
 	uint32_t i;
 	int32_t j;
 
-	if (ptr == nullptr) {
+	if (raw_data == nullptr) {
 		for (i = 0; i < num_bytes * 8; i++)
 			to_fill.push_back(fill_with);
 		return;
 	}
 
-	byte = (uint8_t *) ptr;
+	byte = (uint8_t *) raw_data;
 	for (i = 0; i < num_bytes; i++) {
 		for (j = 7; j >= 0; j--) {
 			bit = (byte[i] >> j) & 1;

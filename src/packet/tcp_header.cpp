@@ -28,7 +28,7 @@ void TCPHeader::get_bitstring(std::vector<int8_t> &to_fill, int8_t fill_with) {
 		make_bitstring(SIZE_TCP_HEADER_BITSTRING, nullptr, to_fill, fill_with);
 		return;
 	}
-	tcp_header_byte_size = raw->th_off * 4;
+	tcp_header_byte_size = raw->th_off << 2;
 	zero_byte_width = SIZE_TCP_HEADER_BITSTRING - tcp_header_byte_size;
 	make_bitstring(tcp_header_byte_size, (void *) raw, to_fill, fill_with);
 	make_bitstring(zero_byte_width, nullptr, to_fill, fill_with);
@@ -36,7 +36,7 @@ void TCPHeader::get_bitstring(std::vector<int8_t> &to_fill, int8_t fill_with) {
 
 void TCPHeader::get_bitstring_header(std::vector<std::string> &to_fill) {
 	std::vector<std::tuple<std::string, uint32_t>> v;
-	v.reserve(18);
+	v.reserve(19);
 	v.emplace_back("tcp_sprt", 16);
 	v.emplace_back("tcp_dprt", 16);
 	v.emplace_back("tcp_seq", 32);
