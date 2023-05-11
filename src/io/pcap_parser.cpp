@@ -32,7 +32,7 @@ PCAPParser::packet_handler(CallbackData callbackData, const struct pcap_pkthdr *
     if (pSuperPacket == nullptr) return;
 
     callback_data->write_output(pSuperPacket);
-    callback_data->perform_predict(packet);
+    callback_data->perform_predict(packet, packet_header);
     callback_data->bitstring_vec.clear();
 }
 
@@ -112,7 +112,7 @@ PCAPParser::~PCAPParser() {
     delete this->m_PythonContext;
 }
 
-void PCAPParser::perform_predict(const u_char *packet) {
+void PCAPParser::perform_predict(const u_char *packet, const struct pcap_pkthdr *pcap_header) {
 #pragma region 处理 IP 地址
     auto ip_header = (struct iphdr *) (packet + sizeof(struct ether_header));
     char src_ip[INET_ADDRSTRLEN];
@@ -133,16 +133,31 @@ void PCAPParser::perform_predict(const u_char *packet) {
         out << "\033[31m";
     }
 
-    out << "| " << PCAPParser::get_protocol_name((u_char *) packet)
-        << " |  FROM IP: " << src_ip << " -> " << label
-        << " -> TO IP: " << dst_ip << "\033[0m";
+    auto tv_sec = pcap_header->ts.tv_sec;
+    auto tv_usec = pcap_header->ts.tv_usec;
+    auto protocol = PCAPParser::get_protocol_name((u_char *) packet);
+
+
+    //    out << "| " << protocol
+    //        << " |  FROM IP: " << src_ip << " -> " << label
+    //        << " -> TO IP: " << dst_ip << "\033[0m";
+
+    //    const char *filter_help = R"""(
+    out << "{"
+        << "\"tv_sec\": " << tv_sec << ","
+        << "\"tv_usec\": " << tv_usec << ","
+        << "\"attack_type\":\"" << label << "\","
+        << "\"device_ip\": \"" << dst_ip << "\","
+        << "\"source_ip\": \"" << dst_ip << "\","
+        << "\"protocol\": \"" << protocol << "\""
+        << "}";
 #define mq
 #ifdef mq
-    //    if (label != "benign") {
-    // this->publish_message(out.str().c_str());
-    this->m_kafkaProducer->pushMessage(out.str(), "");
-    std::cout << out.str() << std::endl;
-    //    }
+    if (label != "benign") {
+        // this->publish_message(out.str().c_str());
+        this->m_kafkaProducer->pushMessage(out.str(), "");
+        std::cout << out.str() << std::endl;
+    }
 
 #endif
     //#ifndef mq
@@ -151,7 +166,7 @@ void PCAPParser::perform_predict(const u_char *packet) {
 }
 
 std::string PCAPParser::get_protocol_name(u_char *packet) {
-    u_char *ip_data = (u_char *) (packet) + 14;;
+    u_char *ip_data = (u_char *) (packet) + 14;
     u_char protocol = ip_data[9];
 
     switch (protocol) {
@@ -169,6 +184,7 @@ std::string PCAPParser::get_protocol_name(u_char *packet) {
 void PCAPParser::write_output(const std::shared_ptr<SuperPacket> &sp) {
     sp->get_bitstring(&(this->m_Config), this->bitstring_vec);
 }
+
 #ifdef RABBIMQ
 void PCAPParser::cleanup_mq_transactions() {
     // Cleanup and close connection
@@ -177,6 +193,7 @@ void PCAPParser::cleanup_mq_transactions() {
     amqp_destroy_connection(state_buff);
 }
 #endif
+
 void PCAPParser::init_captor_args() {
     m_TimeVal.tv_sec = 0;
     m_TimeVal.tv_usec = 0;

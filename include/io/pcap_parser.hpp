@@ -52,7 +52,7 @@ private:
 
 	std::shared_ptr<SuperPacket> process_packet(void *packet);
 
-	void perform_predict(const u_char *packet);
+	void perform_predict(const u_char *packet, const struct pcap_pkthdr *);
 
     static std::string get_protocol_name(u_char *packet);
 
