@@ -2,7 +2,6 @@
 #include <sstream>
 #include <utility>
 #include <thread>
-#include <spdlog/spdlog.h>
 
 
 using CallbackData = u_char *;
@@ -38,19 +37,7 @@ PCAPParser::packet_handler(CallbackData callbackData, const struct pcap_pkthdr *
 }
 
 std::shared_ptr<SuperPacket> PCAPParser::process_packet(void *packet) {
-
-    std::shared_ptr<SuperPacket> pSuperPacket =
-            std::make_shared<SuperPacket>(packet, this->m_Config.max_payload_len, this->m_LinkType);
-
-    if (pSuperPacket->check_parseable()) {
-        if (this->m_Config.verbose) {
-            pSuperPacket->print_packet(stderr);
-        }
-    } else {
-        pSuperPacket.reset();
-    }
-
-    return pSuperPacket;
+    return std::make_shared<SuperPacket>(packet, this->m_Config.max_payload_len, this->m_LinkType);
 }
 
 
@@ -69,7 +56,7 @@ pcap_t *PCAPParser::open_live_handle() {
     std::cout << "\n ===== \033[1;31m 使用默认网卡: " << m_Config.device << "\033[0m\n\n";
 
     const char *dev_name = m_Config.device.c_str();
-    struct bpf_program fp;
+    struct bpf_program fp{};
     char filter_exp[] = "tcp or udp or icmp";
     bpf_u_int32 net, mask;
     pcap_t *device_handle = pcap_open_live(dev_name, BUFSIZ, 1, 1000, err_buf);
@@ -113,18 +100,19 @@ PCAPParser::PCAPParser(Config config) : m_Config(std::move(config)) {
     //    if (NOT this->load_mq_context()) exit(EXIT_FAILURE);
     std::cout << "\n\t\033[31m =================== Load Python Context ============\n\033[0m";
     this->m_PythonContext = new Python();
+    std::string brokers = "172.22.105.151:19092,172.22.105.151:29092,172.22.105.151:39092";
+    std::string topic = "warn";
+    this->m_kafkaProducer = new KafkaProducer(brokers, topic, 0);
 }
 
 PCAPParser::~PCAPParser() {
+#ifdef RABBITMQ
     this->cleanup_mq_transactions();
+#endif
     delete this->m_PythonContext;
 }
 
 void PCAPParser::perform_predict(const u_char *packet) {
-    auto ethernet_header = (struct ether_header *) packet;
-    //    std::cout << "ntohs(ethernet_header->ether_type) != ETHERTYPE_IP" << std::endl;
-    //    if (ntohs(ethernet_header->ether_type) != ETHERTYPE_IP) return;
-    //    std::cout << "ntohs(ethernet_header->ether_type) == ETHERTYPE_IP" << std::endl;
 #pragma region 处理 IP 地址
     auto ip_header = (struct iphdr *) (packet + sizeof(struct ether_header));
     char src_ip[INET_ADDRSTRLEN];
@@ -152,6 +140,7 @@ void PCAPParser::perform_predict(const u_char *packet) {
 #ifdef mq
     //    if (label != "benign") {
     // this->publish_message(out.str().c_str());
+    this->m_kafkaProducer->pushMessage(out.str(), "");
     std::cout << out.str() << std::endl;
     //    }
 
@@ -180,14 +169,14 @@ std::string PCAPParser::get_protocol_name(u_char *packet) {
 void PCAPParser::write_output(const std::shared_ptr<SuperPacket> &sp) {
     sp->get_bitstring(&(this->m_Config), this->bitstring_vec);
 }
-
+#ifdef RABBIMQ
 void PCAPParser::cleanup_mq_transactions() {
     // Cleanup and close connection
     amqp_channel_close(state_buff, channel, AMQP_REPLY_SUCCESS);
     amqp_connection_close(state_buff, AMQP_REPLY_SUCCESS);
     amqp_destroy_connection(state_buff);
 }
-
+#endif
 void PCAPParser::init_captor_args() {
     m_TimeVal.tv_sec = 0;
     m_TimeVal.tv_usec = 0;
@@ -198,6 +187,7 @@ void PCAPParser::init_captor_args() {
     this->bitstring_vec.reserve(size << 5);
 }
 
+#ifdef RABBIMQ
 bool PCAPParser::init_connection() {
     this->state_buff = amqp_new_connection();
     //    std::cout << "\033[36m >>>> " << __LINE__ << std::endl;
@@ -318,3 +308,4 @@ bool PCAPParser::check_last_status(amqp_response_type_enum status, std::string &
     std::cout << out << std::endl;
     return ret;
 }
+#endif

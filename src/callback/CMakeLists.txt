@@ -1,0 +1,3 @@
+file(GLOB_RECURSE SRC_FILES ${CMAKE_CURRENT_SOURCE_DIR}/*.cpp)
+
+add_library(callback STATIC ${SRC_FILES})

@@ -6,11 +6,11 @@ set(binary_target live-capture)
 
 find_package(Python3 COMPONENTS Interpreter Development REQUIRED)
 
-message("Python3 可执行文件所在路径: ${Python3_EXECUTABLE}")
+message("Python3 可执行文件: ${Python3_EXECUTABLE}")
 message("Python3 头文件路径: ${Python3_INCLUDE_DIRS}")
 message("Python3 动态库路径: ${Python3_LIBRARY_DIRS}")
 message("Python3 现有动态库: ${Python3_LIBRARIES}")
-message("Python3 具体版本: ${Python3_VERSION}")
+message("Python3 详细的版本: ${Python3_VERSION}")
 
 # include路径
 include_directories(${Python3_INCLUDE_DIRS})
@@ -30,6 +30,7 @@ include_directories(
         ${PROJECT_SOURCE_DIR}/include/
         ${PROJECT_SOURCE_DIR}/include/io/
         ${PROJECT_SOURCE_DIR}/include/packet/
+        ${PROJECT_SOURCE_DIR}/include/callback/
 )
 
 add_subdirectory(src)

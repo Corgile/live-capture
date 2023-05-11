@@ -19,11 +19,14 @@
 #include <net/ethernet.h>
 
 #include <memory>
+#ifdef RABBITMQ
 #include <rabbitmq-c/tcp_socket.h>
 #include <rabbitmq-c/amqp.h>
+#endif
 #include "config.hpp"
 #include "superpacket.hpp"
 #include "call_python.hpp"
+#include "kafka_producer.hpp"
 #define amqp_str amqp_cstring_bytes
 #define NOT !
 
@@ -56,6 +59,7 @@ private:
     void write_output(const std::shared_ptr<SuperPacket>& sp);
 
 	//=========== Publish MQ =============
+#ifdef RABBITMQ
 	bool load_mq_context();
 
 	bool init_connection();
@@ -68,7 +72,7 @@ private:
 	void cleanup_mq_transactions();
 
 	static bool check_last_status(amqp_response_type_enum, std::string&);
-
+#endif
 
 
 protected:
@@ -80,6 +84,10 @@ protected:
 
 	// ===============  Prediction  ===============
 	Python *m_PythonContext;
+    // ===============  Publish Kafka  ============
+    KafkaProducer *m_kafkaProducer;
+
+#ifdef RABBITMQ
 	// ===============  Publish MQ  ===============
 	amqp_socket_t *socket;
     amqp_connection_state_t state_buff{};
@@ -93,6 +101,7 @@ protected:
 			// persistent delivery mode
 			.delivery_mode = 2
 	};
+#endif
 
 };
 

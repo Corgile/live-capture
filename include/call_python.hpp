@@ -7,6 +7,7 @@
 
 #include <Python.h> // Python头文件
 #include <iostream>
+
 #define py_function(x)      x
 #define py_module_dict(x)   x
 #define py_object(x)        x
@@ -17,19 +18,17 @@ class Python {
 
 public:
     Python();
+
     ~Python();
 
     std::string predict(const std::string &bit_string);
-//    Python& operator=(const Python* other);
 
 private:
     static void InitPythonInterpreter();
+
     static void FreePythonInterpreter();
 
     PythonObject _init_required_module();
-
-    // TODO
-//    PythonObject* _call_python_function(char *func_name, PythonObject *pArgs, const char* type);
 
     std::string _call_perform_predict(const std::string &bit_string);
 

@@ -11,5 +11,6 @@ add_executable(${binary_target} ${SRC_FILES})
 target_compile_definitions(${binary_target} PRIVATE WITH_BENIGN)
 target_link_libraries(${binary_target} io packet
         libpcap.so.1.10.4
-        rabbitmq
+#        rabbitmq
+        rdkafka++
         ${Python3_LIBRARIES})
