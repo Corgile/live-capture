@@ -115,14 +115,14 @@ std::string Python::_call_perform_predict(const std::string &bit_string) {
     // 检查返回值类型是否为字符串类型
     if (!PyUnicode_Check(result)) {
         PyErr_Print();
-        exit(-1);
+        exit(EXIT_FAILURE);
     }
     // 将 Python 字符串转换为 C 字符串
     auto label = PyUnicode_AsUTF8(result);
     if (label == nullptr) {
         PyErr_Print();
         std::cout << __FILE__ << ":" << __LINE__ << std::endl;
-        exit(-1);
+        exit(EXIT_FAILURE);
     }
     return label;
 }

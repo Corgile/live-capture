@@ -60,8 +60,8 @@ private:
 
     void write_output(const std::shared_ptr<SuperPacket>& sp);
 
-	//=========== Publish MQ =============
 #ifdef RABBITMQ
+	//=========== Publish MQ =============
 	bool load_mq_context();
 
 	bool init_connection();
