@@ -1,17 +1,7 @@
 import numpy as np
 from keras.models import load_model
-import logging
-
-
-
-
-def get_model():
-    # print("加载模型")
-    return load_model('/home/gzhuadmin/workspace/live-capture/target/m2_128.h5')
 
 def perform_predict(model, bit_string: str) -> str:
-    logging.basicConfig(level=logging.ERROR)
-    # print("\n执行python脚本")
     most_important_indices = \
         [
             1, 107, 231, 25, 109, 15, 233, 0, 2, 3, 235, 4, 29, 234, 232, 199, 239, 5, 230, 16, 180, 98,
@@ -40,19 +30,4 @@ def perform_predict(model, bit_string: str) -> str:
             verbose=0
         )
     )
-    # label =
-    # with open("/home/linyikai/ml/nprint/example/traffic_with_port_scan.csv") as traffic:
-    #     for line in traffic:
-    #         samples = list(map(int, line.split(",")[1:]))
-    #         index = np.argmax(
-    #             model.predict(
-    #                 np.take(
-    #                     samples, most_important_indices, axis=0
-    #                 )[np.newaxis, :, np.newaxis].astype('int'),
-    #                 verbose=0
-    #             )
-    #         )
-    #         label = label_map[int(index)]
-    #         if label != "benign":
-    #             print(label)
     return label_map[int(index)]
