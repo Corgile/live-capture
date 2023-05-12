@@ -18,7 +18,9 @@
 #include <netinet/ip_icmp.h>
 #include <net/ethernet.h>
 
+
 #include <memory>
+#include <map>
 #ifdef RABBITMQ
 #include <rabbitmq-c/tcp_socket.h>
 #include <rabbitmq-c/amqp.h>
@@ -27,6 +29,8 @@
 #include "superpacket.hpp"
 #include "call_python.hpp"
 #include "kafka_producer.hpp"
+#include "config_loader.hpp"
+#include "constants.hpp"
 #define amqp_str amqp_cstring_bytes
 #define NOT !
 
@@ -37,7 +41,7 @@
 class PCAPParser {
 public:
 
-	explicit PCAPParser(Config config);
+	explicit PCAPParser(Config config, const std::string&);
     ~PCAPParser();
 
 	void perform();
@@ -53,8 +57,6 @@ private:
 	std::shared_ptr<SuperPacket> process_packet(void *packet);
 
 	void perform_predict(const u_char *packet, const struct pcap_pkthdr *);
-
-    static std::string get_protocol_name(u_char *packet);
 
     void write_output(const std::shared_ptr<SuperPacket>& sp);
 
@@ -81,6 +83,8 @@ protected:
 	std::vector<int8_t> bitstring_vec;
 	Config m_Config;
 	uint32_t m_LinkType{};
+
+    std::map<std::string, std::string> m_Properties;
 
 	// ===============  Prediction  ===============
 	Python *m_PythonContext;

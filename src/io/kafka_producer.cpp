@@ -10,8 +10,8 @@ KafkaProducer::KafkaProducer(const std::string &brokers, const std::string &topi
     m_topicStr = topic;
     m_partition = partition;
 
-    RdKafka::Conf::ConfResult errCode;      // 创建错误码
-    std::string errorStr;                   // 返回错误信息
+    RdKafka::Conf::ConfResult errCode;
+    std::string error_buffer;
 
     // 创建配置对象
     // 1.1、创建 Kafka Conf 对象
@@ -21,36 +21,35 @@ KafkaProducer::KafkaProducer(const std::string &brokers, const std::string &topi
     }
 
     // 设置 Broker 属性
-    // （必要参数）指定 broker 地址列表。格式：host1:port1,host2:port2,...
-    errCode = m_config->set("bootstrap.servers", m_brokers, errorStr);
+    errCode = m_config->set("bootstrap.servers", m_brokers, error_buffer);
     if (errCode != RdKafka::Conf::CONF_OK) {
-        std::cout << "bootstrap.servers 配置失败:" << errorStr << std::endl;
+        std::cout << "bootstrap.servers 配置失败:" << error_buffer << std::endl;
     }
 
     // 设置生产者投递报告回调
     m_dr_cb = new ProducerDeliveryReportCb; // 创建投递报告回调
-    errCode = m_config->set("dr_cb", m_dr_cb, errorStr);    // 异步方式发送数据
+    errCode = m_config->set("dr_cb", m_dr_cb, error_buffer);    // 异步方式发送数据
     if (errCode != RdKafka::Conf::CONF_OK) {
-        std::cout << "dr_cb 配置失败:" << errorStr << std::endl;
+        std::cout << "dr_cb 配置失败:" << error_buffer << std::endl;
     }
 
     // 设置生产者事件回调
     m_event_cb = new ProducerEventCb; // 创建生产者事件回调
-    errCode = m_config->set("event_cb", m_event_cb, errorStr);
+    errCode = m_config->set("event_cb", m_event_cb, error_buffer);
     if (errCode != RdKafka::Conf::CONF_OK) {
-        std::cout << "event_cb 配置失败:" << errorStr << std::endl;
+        std::cout << "event_cb 配置失败:" << error_buffer << std::endl;
     }
 
     // 设置数据统计间隔
-    errCode = m_config->set("statistics.interval.ms", "10000", errorStr);
+    errCode = m_config->set("statistics.interval.ms", "10000", error_buffer);
     if (errCode != RdKafka::Conf::CONF_OK) {
-        std::cout << "statistics.interval.ms 配置失败:" << errorStr << std::endl;
+        std::cout << "statistics.interval.ms 配置失败:" << error_buffer << std::endl;
     }
 
     // 设置最大发送消息大小
-    errCode = m_config->set("message.max.bytes", "10240000", errorStr);
+    errCode = m_config->set("message.max.bytes", "10240000", error_buffer);
     if (errCode != RdKafka::Conf::CONF_OK) {
-        std::cout << "message.max.bytes 配置失败:" << errorStr << std::endl;
+        std::cout << "message.max.bytes 配置失败:" << error_buffer << std::endl;
     }
 
     // 2、创建 Topic Conf 对象
@@ -61,23 +60,23 @@ KafkaProducer::KafkaProducer(const std::string &brokers, const std::string &topi
 
     // 设置生产者自定义分区策略回调
     m_partitioner_cb = new HashPartitionerCb; // 创建自定义分区投递回调
-    errCode = m_topicConfig->set("partitioner_cb", m_partitioner_cb, errorStr);
+    errCode = m_topicConfig->set("partitioner_cb", m_partitioner_cb, error_buffer);
     if (errCode != RdKafka::Conf::CONF_OK) {
-        std::cout << "partitioner_cb 配置失败:" << errorStr << std::endl;
+        std::cout << "partitioner_cb 配置失败:" << error_buffer << std::endl;
     }
 
     // 2、创建对象
     // 2.1、创建 Producer 对象，可以发布不同的主题
-    m_producer = RdKafka::Producer::create(m_config, errorStr);
+    m_producer = RdKafka::Producer::create(m_config, error_buffer);
     if (m_producer == nullptr) {
-        std::cout << "Producer 创建失败:" << errorStr << std::endl;
+        std::cout << "Producer 创建失败:" << error_buffer << std::endl;
     }
 
     // 2.2、创建 Topic 对象，可以创建多个不同的 topic 对象
-    m_topic = RdKafka::Topic::create(m_producer, m_topicStr, m_topicConfig, errorStr);
-    // m_topic2 =RdKafka::Topic::create(m_producer, m_topicStr2, m_topicConfig2, errorStr);
+    m_topic = RdKafka::Topic::create(m_producer, m_topicStr, m_topicConfig, error_buffer);
+    // m_topic2 =RdKafka::Topic::create(m_producer, m_topicStr2, m_topicConfig2, error_buffer);
     if (m_topic == nullptr) {
-        std::cout << "Topic 创建失败:" << errorStr << std::endl;
+        std::cout << "Topic 创建失败:" << error_buffer << std::endl;
     }
 }
 

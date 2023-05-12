@@ -17,7 +17,7 @@ using PythonObject = PyObject *;
 class Python {
 
 public:
-    Python();
+    Python(std::string , std::string , std::string );
 
     ~Python();
 
@@ -28,13 +28,17 @@ private:
 
     static void FreePythonInterpreter();
 
-    PythonObject _init_required_module();
+    void _init_required_module();
 
     std::string _call_perform_predict(const std::string &bit_string);
 
     PythonObject m_Model;
     PythonObject m_Functions;
-    PythonObject m_RequiredModules;
+    PythonObject m_RequiredModules{};
+
+    std::string m_Model_path;
+    std::string m_Py_module_path;
+    std::string m_Py_module_name;
 
 };
 

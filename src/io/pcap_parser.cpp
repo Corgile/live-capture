@@ -2,29 +2,38 @@
 #include <sstream>
 #include <utility>
 #include <thread>
+#include <nlohmann/json.hpp>
 
+#define ETH_HEADER_LEN  sizeof(struct ether_header)
 
-using CallbackData = u_char *;
+using callback_data_t = u_char *;
+using tcp_header_t = const struct tcphdr *;
+using eth_header_t = const struct ether_header *;
+using ip_header_t = const struct iphdr *;
+using udp_header_t = const struct udphdr *;
+using icmp_header_t = const struct icmphdr *;
+
 char err_buf[PCAP_ERRBUF_SIZE];
+
 
 void PCAPParser::perform() {
     std::unique_ptr<pcap_t, void (*)(pcap_t *)> handle{this->open_live_handle(), &pcap_close};
     auto device = handle.get();
     this->m_LinkType = pcap_datalink(device);
     pcap_set_promisc(device, 1);
-    pcap_loop(device, 0, packet_handler, (CallbackData) this);
+    pcap_loop(device, 0, packet_handler, (callback_data_t) this);
 }
 
-void
-PCAPParser::packet_handler(CallbackData callbackData, const struct pcap_pkthdr *packet_header, const u_char *packet) {
+void PCAPParser::packet_handler(callback_data_t callbackData, const struct pcap_pkthdr *packet_header,
+                                const u_char *packet) {
     struct vlan_hdr {
         uint32_t v1;
     };
-    auto ethernet_header = (struct ether_header *) packet;
+    auto ethernet_header = reinterpret_cast<eth_header_t>(packet);
     if (ntohs(ethernet_header->ether_type) == ETHERTYPE_VLAN) {
         packet = (u_char *) (packet + sizeof(struct vlan_hdr));
     }
-    auto callback_data = (PCAPParser *) callbackData;
+    auto callback_data = reinterpret_cast<PCAPParser *>(callbackData);
     if (callback_data->m_LinkType == DLT_LINUX_SLL) {
         packet = (uint8_t *) packet + LINUX_COOKED_HEADER_SIZE;
     }
@@ -44,18 +53,17 @@ std::shared_ptr<SuperPacket> PCAPParser::process_packet(void *packet) {
 pcap_t *PCAPParser::open_live_handle() {
     pcap_if_t *find_device_handle;
     // get device_handle
-    if (m_Config.device.empty()) {
+    if (this->m_Properties[keys::DEVICE_NAME].empty()) {
         int32_t rv = pcap_findalldevs(&find_device_handle, err_buf);
         if (rv == -1) {
             std::cerr << "默认设备查询失败: " << err_buf << std::endl;
             exit(EXIT_FAILURE);
         }
-        m_Config.device = find_device_handle->name;
+        this->m_Properties[keys::DEVICE_NAME] = find_device_handle->name;
+        std::cout << "\n ===== \033[1;31m 使用默认网卡: " << find_device_handle->name << "\033[0m\n\n";
     }
-
-    std::cout << "\n ===== \033[1;31m 使用默认网卡: " << m_Config.device << "\033[0m\n\n";
-
-    const char *dev_name = m_Config.device.c_str();
+    std::cout << "\n ===== \033[1;31m 使用网卡: " << this->m_Properties[keys::DEVICE_NAME] << " =====\033[0m\n\n";
+    const char *dev_name = this->m_Properties[keys::DEVICE_NAME].c_str();
     struct bpf_program fp{};
     char filter_exp[] = "tcp or udp or icmp";
     bpf_u_int32 net, mask;
@@ -66,43 +74,52 @@ pcap_t *PCAPParser::open_live_handle() {
     return device_handle;
 }
 
-#ifdef MY_SETFILTER
-void PCAPParser::set_filter(pcap_t *handle, char *filter) const {
-    if (!filter) return;
+PCAPParser::PCAPParser(Config config, const std::string &config_properties)
+        : m_Config(std::move(config)) {
+    pcap_if_t *alldevs;
+    int ret = pcap_findalldevs(&alldevs, err_buf);
+    if (ret != 0) {
+        std::cout << "pcap_findalldevs() failed: " << err_buf << std::endl;
+        exit(EXIT_FAILURE);
+    }
 
-    bpf_u_int32 net = 0, mask = 0;
-    struct bpf_program fp{};
-    char errbuf[PCAP_ERRBUF_SIZE];
+    // 输出网卡列表
+    bool found{false};
+    if (!this->m_Properties[keys::DEVICE_NAME].empty()) {
+        for (pcap_if_t *d = alldevs; d != nullptr; d = d->next) {
+            found = d->name == this->m_Properties[keys::DEVICE_NAME];
+            if (found) break;
+        }
 
-    if (m_Config.live_capture != 0) {
-        // get mask
-        if (pcap_lookupnet(m_Config.device.c_str(), &net, &mask, errbuf) == -1) {
-            std::cerr << "Can't get netmask for device: " << m_Config.device << std::endl;
+        if (!found) {
+            std::cout << "找不到网卡设备: [" << this->m_Properties[keys::DEVICE_NAME] << "]" << std::endl;
+            exit(EXIT_FAILURE);
         }
     }
+    // 释放资源
+    pcap_freealldevs(alldevs);
 
-    if (pcap_compile(handle, &fp, filter, 0, net) == -1) {
-        std::cerr << "Couldn't parse filter " << filter << ": " << pcap_geterr(handle) << std::endl;
-        exit(2);
-    }
-
-    if (pcap_setfilter(handle, &fp) == -1) {
-        std::cerr << "Couldn't install filter " << filter << ": " << pcap_geterr(handle) << std::endl;
-        exit(2);
-    }
-}
-#endif
-
-PCAPParser::PCAPParser(Config config) : m_Config(std::move(config)) {
     std::cout << "\n\t\033[31m =================== Init Captor Args ============\033[0m\n";
     this->init_captor_args();
-    //    std::cout << "\n\t\033[31m =================== Load MQ Context ============\033[0m\n";
-    //    if (NOT this->load_mq_context()) exit(EXIT_FAILURE);
-    std::cout << "\n\t\033[31m =================== Load Python Context ============\n\033[0m";
-    this->m_PythonContext = new Python();
-    std::string brokers = "172.22.105.151:19092,172.22.105.151:29092,172.22.105.151:39092";
-    std::string topic = "warn";
-    this->m_kafkaProducer = new KafkaProducer(brokers, topic, 0);
+    std::cout << "\n\t\033[32m =================== loading properties ============\n\033[0m";
+    auto loader = new ConfigLoader(config_properties);
+    this->m_Properties = loader->get();
+    std::cout << "\n\t\033[33m =================== loading Kafka context ============\n\033[0m";
+    this->m_kafkaProducer = new KafkaProducer(
+            this->m_Properties[keys::KAFKA_BROKER],
+            this->m_Properties[keys::KAFKA_TOPIC],
+            std::stoi(this->m_Properties[keys::KAFKA_PARTITION])
+    );
+    std::cout << "\n\t\033[34m =================== loading Python context ============\n\033[0m";
+    this->m_PythonContext = new Python(
+            this->m_Properties[keys::MODEL_PATH],
+            this->m_Properties[keys::SCRIPT_PATH],
+            this->m_Properties[keys::SCRIPT_NAME]
+    );
+#ifdef RABBITMQ
+    std::cout << "\n\t\033[31m =================== Load MQ Context ============\033[0m\n";
+    if (NOT this->load_mq_context()) exit(EXIT_FAILURE);
+#endif
 }
 
 PCAPParser::~PCAPParser() {
@@ -113,13 +130,56 @@ PCAPParser::~PCAPParser() {
 }
 
 void PCAPParser::perform_predict(const u_char *packet, const struct pcap_pkthdr *pcap_header) {
-#pragma region 处理 IP 地址
-    auto ip_header = (struct iphdr *) (packet + sizeof(struct ether_header));
+
+    /** extract as IP packet and resolve the IPs */
+    auto ip_packet_header = reinterpret_cast<ip_header_t> (packet + ETH_HEADER_LEN);
+    /** 处理 IP 地址 */
     char src_ip[INET_ADDRSTRLEN];
     char dst_ip[INET_ADDRSTRLEN];
-    inet_ntop(AF_INET, &(ip_header->saddr), src_ip, INET_ADDRSTRLEN);
-    inet_ntop(AF_INET, &(ip_header->daddr), dst_ip, INET_ADDRSTRLEN);
+    inet_ntop(AF_INET, &(ip_packet_header->saddr), src_ip, INET_ADDRSTRLEN);
+    inet_ntop(AF_INET, &(ip_packet_header->daddr), dst_ip, INET_ADDRSTRLEN);
+
+    /** get the IP header length */
+    size_t ip_hdr_len = (ip_packet_header->ihl) * 4;
+    uint16_t src_port, dst_port;
+    std::string protocol;
+    /** determine the protocol */
+    switch (ip_packet_header->protocol) {
+        case IPPROTO_TCP:
+            /** extract as TCP */
+            tcp_header_t tcp_hdr;
+            tcp_hdr = reinterpret_cast<tcp_header_t>(packet + ETH_HEADER_LEN + ip_hdr_len);
+            src_port = ntohs(tcp_hdr->source);
+            dst_port = ntohs(tcp_hdr->dest);
+            protocol = "TCP";
+            break;
+        case IPPROTO_UDP:
+            /** extract as UDP */
+            udp_header_t udp_hdr;
+            udp_hdr = reinterpret_cast<udp_header_t>(packet + ETH_HEADER_LEN + ip_hdr_len);
+            src_port = ntohs(udp_hdr->source);
+            dst_port = ntohs(udp_hdr->dest);
+            protocol = "UDP";
+            break;
+        case IPPROTO_ICMP:
+            /** extract the ICMP message type and code */
+            icmp_header_t icmp_hdr;
+            icmp_hdr = reinterpret_cast<icmp_header_t>(packet + ETH_HEADER_LEN + ip_hdr_len);
+            src_port = icmp_hdr->type;
+            dst_port = icmp_hdr->code;
+            protocol = "ICMP";
+            break;
+        default:
+            /** OTHER */
+            src_port = -1;
+            dst_port = -1;
+            protocol = "OTHER";
+            break;
+    }
+
 #pragma endregion
+
+#pragma region Jsonify
     std::ostringstream oss;
     for (int i = 0; i < this->bitstring_vec.size(); ++i) {
         if (i != 0) oss << ",";
@@ -128,56 +188,24 @@ void PCAPParser::perform_predict(const u_char *packet, const struct pcap_pkthdr 
     auto bitstring = oss.str();
     std::string label = this->m_PythonContext->predict(bitstring);
 
-    std::ostringstream out;
+    nlohmann::json result = {
+            {"timestamp",  pcap_header->ts.tv_sec},
+            {"u_sec",      pcap_header->ts.tv_usec},
+            {"attackType", label},
+            {"dstIp",      dst_ip},
+            {"dstPort",    dst_port},
+            {"srcIp",      src_ip},
+            {"srcPort",    src_port},
+            {"protocol",   protocol}
+    };
+#pragma endregion
+
     if (label != "benign") {
-        out << "\033[31m";
-    }
-
-    auto tv_sec = pcap_header->ts.tv_sec;
-    auto tv_usec = pcap_header->ts.tv_usec;
-    auto protocol = PCAPParser::get_protocol_name((u_char *) packet);
-
-
-    //    out << "| " << protocol
-    //        << " |  FROM IP: " << src_ip << " -> " << label
-    //        << " -> TO IP: " << dst_ip << "\033[0m";
-
-    //    const char *filter_help = R"""(
-    out << "{"
-        << "\"tv_sec\": " << tv_sec << ","
-        << "\"tv_usec\": " << tv_usec << ","
-        << "\"attack_type\":\"" << label << "\","
-        << "\"device_ip\": \"" << dst_ip << "\","
-        << "\"source_ip\": \"" << dst_ip << "\","
-        << "\"protocol\": \"" << protocol << "\""
-        << "}";
-#define mq
-#ifdef mq
-    if (label != "benign") {
-        // this->publish_message(out.str().c_str());
-        this->m_kafkaProducer->pushMessage(out.str(), "");
-        std::cout << out.str() << std::endl;
-    }
-
+#ifdef RABBITMQ
+        this->publish_message(out.str().c_str());
 #endif
-    //#ifndef mq
-    //#endif
-
-}
-
-std::string PCAPParser::get_protocol_name(u_char *packet) {
-    u_char *ip_data = (u_char *) (packet) + 14;
-    u_char protocol = ip_data[9];
-
-    switch (protocol) {
-        case IPPROTO_TCP:
-            return "TCP";
-        case IPPROTO_UDP:
-            return "UDP";
-        case IPPROTO_ICMP:
-            return "ICMP";
-        default:
-            return std::to_string(protocol);
+        this->m_kafkaProducer->pushMessage(result.dump(), "");
+        std::cout << "\033[31m" << result.dump() << "\033[0m" << std::endl;
     }
 }
 
