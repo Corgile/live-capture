@@ -23,6 +23,10 @@ public:
 
     std::string predict(const std::string &bit_string);
 
+    void *operator new(size_t size);
+
+    void operator delete(void* p);
+
 private:
     static void InitPythonInterpreter();
 

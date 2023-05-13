@@ -19,8 +19,13 @@ include_directories(${Python3_INCLUDE_DIRS})
 link_directories(${Python3_LIBRARY_DIRS})
 
 
-# macros
-#add_compile_definitions(i_want_to_perform_live_traffic_capture)
+
+set(IF_DEBUG "" CACHE STRING "是否打印调试信息")
+set(IF_INFO "" CACHE STRING "是否打印一般信息")
+set(IF_WARN "" CACHE STRING "是否打印警告信息")
+# 使用变量来设置宏定义
+add_compile_definitions(${IF_DEBUG} ${IF_WARN} ${IF_INFO})
+
 
 # all public header for all source files
 include_directories(

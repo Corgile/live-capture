@@ -1,10 +1,13 @@
-#include "pcap_parser.hpp"
 #include <sstream>
 #include <utility>
 #include <thread>
 #include <nlohmann/json.hpp>
+#include "pcap_parser.hpp"
+#include "common_macros.hpp"
 
 #define ETH_HEADER_LEN  sizeof(struct ether_header)
+#define SCOPE_START {
+#define SCOPE_END   }
 
 using callback_data_t = u_char *;
 using tcp_header_t = const struct tcphdr *;
@@ -21,7 +24,7 @@ void PCAPParser::perform() {
     auto device = handle.get();
     this->m_LinkType = pcap_datalink(device);
     pcap_set_promisc(device, 1);
-    pcap_loop(device, 0, packet_handler, (callback_data_t) this);
+    pcap_loop(device, 0, packet_handler, reinterpret_cast<callback_data_t>(this));
 }
 
 void PCAPParser::packet_handler(callback_data_t callbackData, const struct pcap_pkthdr *packet_header,
@@ -51,18 +54,23 @@ std::shared_ptr<SuperPacket> PCAPParser::process_packet(void *packet) {
 
 
 pcap_t *PCAPParser::open_live_handle() {
-    pcap_if_t *find_device_handle;
-    // get device_handle
+    std::unique_ptr<pcap_if_t, pcap_if_t_deleter> find_device_handle;
+
     if (this->m_Properties[keys::DEVICE_NAME].empty()) {
-        int32_t rv = pcap_findalldevs(&find_device_handle, err_buf);
+        auto device = find_device_handle.get();
+        int32_t rv = pcap_findalldevs(&device, err_buf);
         if (rv == -1) {
-            std::cerr << "默认设备查询失败: " << err_buf << std::endl;
+            DEBUG_CALL(std::cerr << "默认设备查询失败: " << err_buf << std::endl);
             exit(EXIT_FAILURE);
         }
-        this->m_Properties[keys::DEVICE_NAME] = find_device_handle->name;
-        std::cout << "\n ===== \033[1;31m 使用默认网卡: " << find_device_handle->name << "\033[0m\n\n";
+        this->m_Properties[keys::DEVICE_NAME] = device->name;
+
+        DEBUG_CALL(std::cout << "\n ===== \033[1;31m 使用默认网卡: " << device->name << "\033[0m\n\n");
+    } else {
+        DEBUG_CALL(std::cout << "\n ===== \033[1;31m 使用网卡: "
+                             << this->m_Properties[keys::DEVICE_NAME]
+                             << " =====\033[0m\n\n");
     }
-    std::cout << "\n ===== \033[1;31m 使用网卡: " << this->m_Properties[keys::DEVICE_NAME] << " =====\033[0m\n\n";
     const char *dev_name = this->m_Properties[keys::DEVICE_NAME].c_str();
     struct bpf_program fp{};
     char filter_exp[] = "tcp or udp or icmp";
@@ -74,44 +82,44 @@ pcap_t *PCAPParser::open_live_handle() {
     return device_handle;
 }
 
-PCAPParser::PCAPParser(Config config, const std::string &config_properties)
+PCAPParser::PCAPParser(Config config, const std::string &config_file_path)
         : m_Config(std::move(config)) {
-    pcap_if_t *alldevs;
-    int ret = pcap_findalldevs(&alldevs, err_buf);
+    std::unique_ptr<pcap_if_t, pcap_if_t_deleter> alldevs;
+    auto devices = alldevs.get();
+    int ret = pcap_findalldevs(&devices, err_buf);
     if (ret != 0) {
-        std::cout << "pcap_findalldevs() failed: " << err_buf << std::endl;
+        DEBUG_CALL(std::cout << "pcap_findalldevs() failed: " << err_buf << std::endl);
         exit(EXIT_FAILURE);
     }
 
     // 输出网卡列表
-    bool found{false};
     if (!this->m_Properties[keys::DEVICE_NAME].empty()) {
-        for (pcap_if_t *d = alldevs; d != nullptr; d = d->next) {
+        bool found{false};
+        for (auto d = alldevs.get(); d != nullptr; d = d->next) {
             found = d->name == this->m_Properties[keys::DEVICE_NAME];
             if (found) break;
         }
-
         if (!found) {
-            std::cout << "找不到网卡设备: [" << this->m_Properties[keys::DEVICE_NAME] << "]" << std::endl;
+            DEBUG_CALL(std::cout << "找不到网卡设备: [" << this->m_Properties[keys::DEVICE_NAME] << "]" << std::endl);
             exit(EXIT_FAILURE);
         }
     }
-    // 释放资源
-    pcap_freealldevs(alldevs);
-
-    std::cout << "\n\t\033[31m =================== Init Captor Args ============\033[0m\n";
+    alldevs.reset();
+    DEBUG_CALL(std::cout << "\n\t\033[31m =================== Init Captor Args ============\033[0m\n");
     this->init_captor_args();
-    std::cout << "\n\t\033[32m =================== loading properties ============\n\033[0m";
-    auto loader = new ConfigLoader(config_properties);
-    this->m_Properties = loader->get();
-    std::cout << "\n\t\033[33m =================== loading Kafka context ============\n\033[0m";
-    this->m_kafkaProducer = new KafkaProducer(
+    DEBUG_CALL(std::cout << "\n\t\033[32m =================== loading properties ============\n\033[0m");
+    SCOPE_START
+        auto loader = std::make_unique<ConfigLoader>(config_file_path);
+        this->m_Properties = loader->get_conf();
+    SCOPE_END
+    DEBUG_CALL(std::cout << "\n\t\033[33m =================== loading Kafka context ============\n\033[0m");
+    this->m_kafkaProducer = std::make_unique<KafkaProducer>(
             this->m_Properties[keys::KAFKA_BROKER],
             this->m_Properties[keys::KAFKA_TOPIC],
             std::stoi(this->m_Properties[keys::KAFKA_PARTITION])
     );
-    std::cout << "\n\t\033[34m =================== loading Python context ============\n\033[0m";
-    this->m_PythonContext = new Python(
+    DEBUG_CALL(std::cout << "\n\t\033[34m =================== loading Python context ============\n\033[0m");
+    this->m_PythonContext = std::make_unique<Python>(
             this->m_Properties[keys::MODEL_PATH],
             this->m_Properties[keys::SCRIPT_PATH],
             this->m_Properties[keys::SCRIPT_NAME]
@@ -126,7 +134,7 @@ PCAPParser::~PCAPParser() {
 #ifdef RABBITMQ
     this->cleanup_mq_transactions();
 #endif
-    delete this->m_PythonContext;
+    DEBUG_CALL(std::cout << "");
 }
 
 void PCAPParser::perform_predict(const u_char *packet, const struct pcap_pkthdr *pcap_header) {
@@ -139,7 +147,7 @@ void PCAPParser::perform_predict(const u_char *packet, const struct pcap_pkthdr 
     inet_ntop(AF_INET, &(ip_packet_header->saddr), src_ip, INET_ADDRSTRLEN);
     inet_ntop(AF_INET, &(ip_packet_header->daddr), dst_ip, INET_ADDRSTRLEN);
 
-    /** get the IP header length */
+    /** get_conf the IP header length */
     size_t ip_hdr_len = (ip_packet_header->ihl) * 4;
     uint16_t src_port, dst_port;
     std::string protocol;
@@ -205,7 +213,7 @@ void PCAPParser::perform_predict(const u_char *packet, const struct pcap_pkthdr 
         this->publish_message(out.str().c_str());
 #endif
         this->m_kafkaProducer->pushMessage(result.dump(), "");
-        std::cout << "\033[31m" << result.dump() << "\033[0m" << std::endl;
+        DEBUG_CALL(std::cout << "\033[31m" << result.dump() << "\033[0m" << std::endl);
     }
 }
 
@@ -230,6 +238,11 @@ void PCAPParser::init_captor_args() {
                 + SIZE_UDP_HEADER_BITSTRING
                 + SIZE_ICMP_HEADER_BITSTRING;
     this->bitstring_vec.reserve(size << 5);
+}
+
+void *PCAPParser::operator new(size_t size) {
+    DEBUG_CALL(std::cout << "\n\t\033[34m ----------------- 分配 " << size << " bytes 内存 -------------------- \033[0m\n");
+    return malloc(size);
 }
 
 #ifdef RABBIMQ

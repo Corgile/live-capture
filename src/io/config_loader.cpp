@@ -60,6 +60,6 @@ void ConfigLoader::check_config(const std::string &key) {
 }
 
 
-std::map<std::string, std::string> ConfigLoader::get() {
+std::map<std::string, std::string> ConfigLoader::get_conf() {
     return this->m_configs;
 }

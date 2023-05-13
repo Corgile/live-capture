@@ -18,8 +18,6 @@ int main(int argc, char **argv) {
         exit(EXIT_FAILURE);
     }
 
-
-
     Config pcapConfig = Config::get_instance();
     FileWriter file_writer(pcapConfig);
     PCAPParser pcap_parser(pcapConfig, config_properties);

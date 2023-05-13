@@ -3,6 +3,7 @@
 //
 
 #include "kafka_producer.hpp"
+#include "common_macros.hpp"
 
 // 构造生产者
 KafkaProducer::KafkaProducer(const std::string &brokers, const std::string &topic, int partition) {
@@ -17,7 +18,7 @@ KafkaProducer::KafkaProducer(const std::string &brokers, const std::string &topi
     // 1.1、创建 Kafka Conf 对象
     m_config = RdKafka::Conf::create(RdKafka::Conf::CONF_GLOBAL);
     if (m_config == nullptr) {
-        std::cout << "创建kafka配置失败." << std::endl;
+        DEBUG_CALL(std::cout << "创建kafka配置失败." << std::endl);
     }
 
     // 设置 Broker 属性

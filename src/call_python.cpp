@@ -3,6 +3,7 @@
 //
 
 #include "call_python.hpp"
+#include "common_macros.hpp"
 
 #include <utility>
 
@@ -51,7 +52,7 @@ Python::Python(std::string model_path,
 
     Python::InitPythonInterpreter();
     this->_init_required_module();
-//    //获取模块字典属性
+    //    //获取模块字典属性
     PythonObject py_module_dict(_functions) = PyModule_GetDict(this->m_RequiredModules);
     if (py_module_dict(_functions) == nullptr) {
         std::cout << __FILE__ << ":" << __LINE__ << " PyModule_GetDict error" << std::endl;
@@ -109,7 +110,7 @@ std::string Python::_call_perform_predict(const std::string &bit_string) {
     //    PyArg_Parse(ret, "O", this->m_Model);
     //    PythonObject pArg = Py_BuildValue("(s)", bit_string.c_str());
     //调用函数，并得到python类型的返回值
-//    exit(EXIT_FAILURE);
+    //    exit(EXIT_FAILURE);
     PythonObject py_object(result) = PyObject_CallObject(prediction, pArgs);
 
     // 检查返回值类型是否为字符串类型
@@ -133,5 +134,15 @@ void Python::InitPythonInterpreter() {
 
 void Python::FreePythonInterpreter() {
     Py_Finalize();
+}
+
+void *Python::operator new(size_t size) {
+    DEBUG_CALL(std::cout << "\n\t\033[34m ----------------- 分配 " << size << " bytes 内存 -------------------- \033[0m\n");
+    return malloc(size);
+}
+
+void Python::operator delete(void *p) {
+    DEBUG_CALL(std::cout << "\n\t\033[31m ----------------- 释放内存 -------------------- \033[0m\n");
+    free(p);
 }
 

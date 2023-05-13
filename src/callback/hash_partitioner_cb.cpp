@@ -3,6 +3,7 @@
 //
 
 #include "hash_partitioner_cb.hpp"
+#include "common_macros.hpp"
 
 int32_t
 HashPartitionerCb::partitioner_cb(const RdKafka::Topic *topic,
@@ -13,8 +14,8 @@ HashPartitionerCb::partitioner_cb(const RdKafka::Topic *topic,
     // 用于自定义分区策略：这里用 hash。例：轮询方式：p_id++ % partition_cnt
     int32_t partition_id = generate_hash(key->c_str(), key->size()) % partition_cnt;
     // 输出：[topic][key][partition_cnt][partition_id]，例 [test][6419][2][1]
-    sprintf(msg, "HashPartitionerCb:topic:[%s], key:[%s], partition_cnt:[%d], partition_id:[%d]",
-            topic->name().c_str(), key->c_str(), partition_cnt, partition_id);
+    DEBUG_CALL(sprintf(msg, "HashPartitionerCb:topic:[%s], key:[%s], partition_cnt:[%d], partition_id:[%d]",
+            topic->name().c_str(), key->c_str(), partition_cnt, partition_id));
     std::cout << msg << std::endl;
     return partition_id;
 }

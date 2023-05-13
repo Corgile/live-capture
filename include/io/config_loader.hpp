@@ -19,7 +19,7 @@ private:
 public:
     explicit ConfigLoader(const std::string& config_file_path);
 
-    std::map<std::string, std::string> get();
+    std::map<std::string, std::string> get_conf();
 };
 
 
