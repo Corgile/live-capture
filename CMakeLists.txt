@@ -13,7 +13,7 @@ message("Python3 现有动态库: ${Python3_LIBRARIES}")
 message("Python3 详细的版本: ${Python3_VERSION}")
 
 # include路径
-include_directories(${Python3_INCLUDE_DIRS})
+#include_directories(${Python3_INCLUDE_DIRS})
 
 # lib路径
 link_directories(${Python3_LIBRARY_DIRS})
@@ -32,10 +32,11 @@ include_directories(
         /usr/include/
         /usr/local/lib/
         /usr/local/include/
+        ${Python3_INCLUDE_DIRS}
         ${PROJECT_SOURCE_DIR}/include/
         ${PROJECT_SOURCE_DIR}/include/io/
         ${PROJECT_SOURCE_DIR}/include/packet/
-        ${PROJECT_SOURCE_DIR}/include/callback/
+        ${PROJECT_SOURCE_DIR}/vendor/spdlog/include/
 )
 
 add_subdirectory(src)

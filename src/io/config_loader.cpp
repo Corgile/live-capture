@@ -31,6 +31,7 @@ ConfigLoader::ConfigLoader(const std::string &m_config_file_path) {
     }
     for (const auto &p: this->m_configs) {
         std::cout << "加载配置： " << p.first << " = " << p.second << std::endl;
+        logger->debug("加载配置 {}", p.first + p.second);
     }
     this->check_config(keys::MODEL_PATH);
     this->check_config(keys::SCRIPT_PATH);
@@ -43,6 +44,7 @@ ConfigLoader::ConfigLoader(const std::string &m_config_file_path) {
 void ConfigLoader::check_config(const std::string &key) {
     if (this->m_configs[key].empty()) {
         std::cout << "缺少配置项： " << key << std::endl;
+        logger->error("缺少配置项: {}", key);
         exit(EXIT_FAILURE);
     }
     if (key != keys::KAFKA_PARTITION) {
@@ -52,9 +54,11 @@ void ConfigLoader::check_config(const std::string &key) {
         std::stoi(this->m_configs[key]);
     } catch (const std::invalid_argument &e) {
         std::cerr << "[" << keys::KAFKA_PARTITION << "] 配置错误" << e.what() << std::endl;
+        logger->error("[{}] 配置错误 ", keys::KAFKA_PARTITION);
         exit(EXIT_FAILURE);
     } catch (const std::out_of_range &e) {
         std::cerr << "[" << keys::KAFKA_PARTITION << "] 配置错误" << e.what() << std::endl;
+        logger->error("[{}] 配置错误 ", keys::KAFKA_PARTITION);
         exit(EXIT_FAILURE);
     }
 }

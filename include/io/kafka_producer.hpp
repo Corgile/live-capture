@@ -9,9 +9,11 @@
 #include <string>
 #include <librdkafka/rdkafkacpp.h>
 
-#include "producer_event_cb.hpp"
-#include "producer_delivery_report_cb.hpp"
-#include "hash_partitioner_cb.hpp"
+#include "cb_producer_event.hpp"
+#include "cb_producer_delivery_report.hpp"
+#include "cb_hash_partitioner.hpp"
+#include "common_macros.hpp"
+#include "daily_logger.hpp"
 
 
 class KafkaProducer {
@@ -44,6 +46,7 @@ protected:
     RdKafka::DeliveryReportCb *m_dr_cb;   // 设置传递回调
     RdKafka::EventCb *m_event_cb;         // 设置事件回调
     RdKafka::PartitionerCb *m_partitioner_cb; // 设置自定义分区回调
+    std::shared_ptr<DailyLogger> logger;
 };
 
 

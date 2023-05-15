@@ -27,6 +27,7 @@ void Python::_init_required_module() {
         PyErr_Print();
         std::cout << __FILE__ << ":" << __LINE__
                   << " PyImport_ImportModule '" << this->m_Py_module_name << "' not found" << std::endl;
+        logger->error("Python Import Module Error: {}", __PRETTY_FUNCTION__);
         exit(EXIT_FAILURE);
     }
 }
@@ -57,6 +58,7 @@ Python::Python(std::string model_path,
     if (py_module_dict(_functions) == nullptr) {
         std::cout << __FILE__ << ":" << __LINE__ << " PyModule_GetDict error" << std::endl;
         PyErr_Print();
+        logger->error("Get Module_Dict Error: {}", __PRETTY_FUNCTION__);
         exit(EXIT_FAILURE);
     }
     this->m_Functions = py_module_dict(_functions);
@@ -86,6 +88,7 @@ Python::Python(std::string model_path,
         std::cout << __FILE__ << ":" << __LINE__
                   << "PyDict_GetItemString 'load_model' not found" << std::endl;
         PyErr_Print();
+        logger->error("Get Dict Item(String) `load_model` Error: {}", __PRETTY_FUNCTION__);
         exit(EXIT_FAILURE);
     }
     PythonObject pArg_model_path = Py_BuildValue("s", this->m_Model_path.c_str());
@@ -100,22 +103,20 @@ std::string Python::_call_perform_predict(const std::string &bit_string) {
         std::cout << __FILE__ << ":" << __LINE__
                   << ": PyDict_GetItemString 'perform_predict' not found" << std::endl;
         PyErr_Print();
-        exit(-1);
+        logger->error("Get Dict Item(String) `perform_predict` Error: {}", __PRETTY_FUNCTION__);
+        exit(EXIT_FAILURE);
     }
     PythonObject py_object(pBitString) = PyUnicode_FromString(bit_string.c_str());
     PythonObject py_object(pArgs) = PyTuple_New(2);
     PyTuple_SetItem(py_object(pArgs), 0, this->m_Model);
     PyTuple_SetItem(py_object(pArgs), 1, py_object(pBitString));
 
-    //    PyArg_Parse(ret, "O", this->m_Model);
-    //    PythonObject pArg = Py_BuildValue("(s)", bit_string.c_str());
-    //调用函数，并得到python类型的返回值
-    //    exit(EXIT_FAILURE);
     PythonObject py_object(result) = PyObject_CallObject(prediction, pArgs);
 
     // 检查返回值类型是否为字符串类型
     if (!PyUnicode_Check(result)) {
         PyErr_Print();
+        logger->error("返回值错误: {}", __PRETTY_FUNCTION__);
         exit(EXIT_FAILURE);
     }
     // 将 Python 字符串转换为 C 字符串
@@ -123,6 +124,7 @@ std::string Python::_call_perform_predict(const std::string &bit_string) {
     if (label == nullptr) {
         PyErr_Print();
         std::cout << __FILE__ << ":" << __LINE__ << std::endl;
+        logger->error("将 Python 字符串转换为 C 字符串，错误: {}", __PRETTY_FUNCTION__);
         exit(EXIT_FAILURE);
     }
     return label;
@@ -137,7 +139,8 @@ void Python::FreePythonInterpreter() {
 }
 
 void *Python::operator new(size_t size) {
-    DEBUG_CALL(std::cout << "\n\t\033[34m ----------------- 分配 " << size << " bytes 内存 -------------------- \033[0m\n");
+    DEBUG_CALL(std::cout << "\n\t\033[34m ----------------- 分配 " << size
+                         << " bytes 内存 -------------------- \033[0m\n");
     return malloc(size);
 }
 

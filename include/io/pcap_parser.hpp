@@ -35,6 +35,7 @@
 #include "kafka_producer.hpp"
 #include "config_loader.hpp"
 #include "constants.hpp"
+#include "daily_logger.hpp"
 
 #define amqp_str amqp_cstring_bytes
 #define NOT !
@@ -52,6 +53,7 @@ public:
     ~PCAPParser();
 
     void perform();
+
 
 private:
 
@@ -92,7 +94,9 @@ private:
 #endif
 
 
-protected:
+private:
+
+    std::shared_ptr<DailyLogger> logger = DailyLogger::getInstance();
 
     struct timeval m_TimeVal{};
     std::vector<int8_t> bitstring_vec;

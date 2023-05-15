@@ -5,7 +5,7 @@
 #ifndef LIVE_CAPTURE_CONSTANTS_HPP
 #define LIVE_CAPTURE_CONSTANTS_HPP
 
-#include <iostream>
+#include <string>
 
 
 namespace keys {

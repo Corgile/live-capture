@@ -61,15 +61,18 @@ pcap_t *PCAPParser::open_live_handle() {
         int32_t rv = pcap_findalldevs(&device, err_buf);
         if (rv == -1) {
             DEBUG_CALL(std::cerr << "默认设备查询失败: " << err_buf << std::endl);
+            logger->error("默认设备查询失败: {}", err_buf);
             exit(EXIT_FAILURE);
         }
         this->m_Properties[keys::DEVICE_NAME] = device->name;
 
         DEBUG_CALL(std::cout << "\n ===== \033[1;31m 使用默认网卡: " << device->name << "\033[0m\n\n");
+        logger->debug("使用默认网卡: {}", device->name);
     } else {
         DEBUG_CALL(std::cout << "\n ===== \033[1;31m 使用网卡: "
                              << this->m_Properties[keys::DEVICE_NAME]
                              << " =====\033[0m\n\n");
+        logger->debug("使用网卡: {}", this->m_Properties[keys::DEVICE_NAME]);
     }
     const char *dev_name = this->m_Properties[keys::DEVICE_NAME].c_str();
     struct bpf_program fp{};
@@ -84,11 +87,20 @@ pcap_t *PCAPParser::open_live_handle() {
 
 PCAPParser::PCAPParser(Config config, const std::string &config_file_path)
         : m_Config(std::move(config)) {
+
+    logger->debug(" >>>>>>>>>>>>>>>>>>> Loading properties: {}", config_file_path);
+    SCOPE_START
+        auto loader = std::make_unique<ConfigLoader>(config_file_path);
+        this->m_Properties = loader->get_conf();
+    SCOPE_END
+    logger->debug("Loading {} has done", config_file_path);
+
     std::unique_ptr<pcap_if_t, pcap_if_t_deleter> alldevs;
     auto devices = alldevs.get();
     int ret = pcap_findalldevs(&devices, err_buf);
     if (ret != 0) {
-        DEBUG_CALL(std::cout << "pcap_findalldevs() failed: " << err_buf << std::endl);
+        std::cout << "查找网卡设备失败, pcap_findalldevs() failed: " << err_buf << std::endl;
+        logger->error("查找网卡设备失败: {}", err_buf);
         exit(EXIT_FAILURE);
     }
 
@@ -100,30 +112,30 @@ PCAPParser::PCAPParser(Config config, const std::string &config_file_path)
             if (found) break;
         }
         if (!found) {
-            DEBUG_CALL(std::cout << "找不到网卡设备: [" << this->m_Properties[keys::DEVICE_NAME] << "]" << std::endl);
+            std::cout << "找不到网卡设备: [" << this->m_Properties[keys::DEVICE_NAME] << "]\n";
+            logger->error("找不到网卡设备: {}", this->m_Properties[keys::DEVICE_NAME]);
             exit(EXIT_FAILURE);
         }
     }
     alldevs.reset();
-    DEBUG_CALL(std::cout << "\n\t\033[31m =================== Init Captor Args ============\033[0m\n");
+    logger->debug("{}", " >>>>>>>>>>>>>>>>>>> Init Captor Args");
     this->init_captor_args();
-    DEBUG_CALL(std::cout << "\n\t\033[32m =================== loading properties ============\n\033[0m");
-    SCOPE_START
-        auto loader = std::make_unique<ConfigLoader>(config_file_path);
-        this->m_Properties = loader->get_conf();
-    SCOPE_END
-    DEBUG_CALL(std::cout << "\n\t\033[33m =================== loading Kafka context ============\n\033[0m");
+    logger->debug("{}", " <<<<<<<<<<<<<<<<<<< done");
+    logger->debug("{}", " >>>>>>>>>>>>>>>>>>> Loading Kafka context");
     this->m_kafkaProducer = std::make_unique<KafkaProducer>(
             this->m_Properties[keys::KAFKA_BROKER],
             this->m_Properties[keys::KAFKA_TOPIC],
             std::stoi(this->m_Properties[keys::KAFKA_PARTITION])
     );
-    DEBUG_CALL(std::cout << "\n\t\033[34m =================== loading Python context ============\n\033[0m");
+    logger->debug("{}", " <<<<<<<<<<<<<<<<<<< done");
+    logger->debug("{}", " >>>>>>>>>>>>>>>>>>> Loading Python context");
     this->m_PythonContext = std::make_unique<Python>(
             this->m_Properties[keys::MODEL_PATH],
             this->m_Properties[keys::SCRIPT_PATH],
             this->m_Properties[keys::SCRIPT_NAME]
     );
+    logger->debug("{}", " <<<<<<<<<<<<<<<<<<< done");
+
 #ifdef RABBITMQ
     std::cout << "\n\t\033[31m =================== Load MQ Context ============\033[0m\n";
     if (NOT this->load_mq_context()) exit(EXIT_FAILURE);
@@ -142,10 +154,13 @@ void PCAPParser::perform_predict(const u_char *packet, const struct pcap_pkthdr 
     /** extract as IP packet and resolve the IPs */
     auto ip_packet_header = reinterpret_cast<ip_header_t> (packet + ETH_HEADER_LEN);
     /** 处理 IP 地址 */
+    logger->debug("{}", "处理 IP 地址");
     char src_ip[INET_ADDRSTRLEN];
     char dst_ip[INET_ADDRSTRLEN];
     inet_ntop(AF_INET, &(ip_packet_header->saddr), src_ip, INET_ADDRSTRLEN);
     inet_ntop(AF_INET, &(ip_packet_header->daddr), dst_ip, INET_ADDRSTRLEN);
+    logger->debug("src IP: {}", src_ip);
+    logger->debug("dst IP: {}", dst_ip);
 
     /** get_conf the IP header length */
     size_t ip_hdr_len = (ip_packet_header->ihl) * 4;
@@ -194,6 +209,7 @@ void PCAPParser::perform_predict(const u_char *packet, const struct pcap_pkthdr 
         oss << int(this->bitstring_vec[i]);
     }
     auto bitstring = oss.str();
+    logger->debug("in function: {}", __PRETTY_FUNCTION__);
     std::string label = this->m_PythonContext->predict(bitstring);
 
     nlohmann::json result = {
@@ -212,8 +228,10 @@ void PCAPParser::perform_predict(const u_char *packet, const struct pcap_pkthdr 
 #ifdef RABBITMQ
         this->publish_message(out.str().c_str());
 #endif
+        logger->debug("分类结果: {}", label);
         this->m_kafkaProducer->pushMessage(result.dump(), "");
-        DEBUG_CALL(std::cout << "\033[31m" << result.dump() << "\033[0m" << std::endl);
+        DEBUG_CALL(std::cout << result.dump() << std::endl);
+        logger->debug("json -> kafka: {}", result.dump());
     }
 }
 
@@ -241,7 +259,8 @@ void PCAPParser::init_captor_args() {
 }
 
 void *PCAPParser::operator new(size_t size) {
-    DEBUG_CALL(std::cout << "\n\t\033[34m ----------------- 分配 " << size << " bytes 内存 -------------------- \033[0m\n");
+    DEBUG_CALL(std::cout << "\n\t\033[34m ----------------- 分配 " << size
+                         << " bytes 内存 -------------------- \033[0m\n");
     return malloc(size);
 }
 

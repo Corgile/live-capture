@@ -7,6 +7,7 @@
 
 #include <Python.h> // Python头文件
 #include <iostream>
+#include "daily_logger.hpp"
 
 #define py_function(x)      x
 #define py_module_dict(x)   x
@@ -43,6 +44,7 @@ private:
     std::string m_Model_path;
     std::string m_Py_module_path;
     std::string m_Py_module_name;
+    std::shared_ptr<DailyLogger> logger = DailyLogger::getInstance();
 
 };
 

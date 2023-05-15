@@ -1,0 +1,2 @@
+[2023-05-15 23:02:37.757] [logger] [error] [kafka.partition] 配置错误 
+[2023-05-15 23:15:53.210] [logger] [error] 文件 [/home/gzhuadmin/workspace/live-capture/model/config.propertie] 不存在或打不开

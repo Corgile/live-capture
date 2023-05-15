@@ -9,6 +9,7 @@
 #include <map>
 #include <string>
 #include <fstream>
+#include "daily_logger.hpp"
 
 class ConfigLoader {
 private:
@@ -16,8 +17,10 @@ private:
 
     void check_config(const std::string &key);
 
+    std::shared_ptr<DailyLogger> logger = DailyLogger::getInstance();
+
 public:
-    explicit ConfigLoader(const std::string& config_file_path);
+    explicit ConfigLoader(const std::string &config_file_path);
 
     std::map<std::string, std::string> get_conf();
 };
