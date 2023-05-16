@@ -121,6 +121,7 @@ PCAPParser::PCAPParser(Config config, const std::string &config_file_path)
     logger->debug("{}", " >>>>>>>>>>>>>>>>>>> Init Captor Args");
     this->init_captor_args();
     logger->debug("{}", " <<<<<<<<<<<<<<<<<<< done");
+#ifndef NO_KAFKA
     logger->debug("{}", " >>>>>>>>>>>>>>>>>>> Loading Kafka context");
     this->m_kafkaProducer = std::make_unique<KafkaProducer>(
             this->m_Properties[keys::KAFKA_BROKER],
@@ -128,13 +129,16 @@ PCAPParser::PCAPParser(Config config, const std::string &config_file_path)
             std::stoi(this->m_Properties[keys::KAFKA_PARTITION])
     );
     logger->debug("{}", " <<<<<<<<<<<<<<<<<<< done");
+#endif
+#ifndef CAP_ONLY
     logger->debug("{}", " >>>>>>>>>>>>>>>>>>> Loading Python context");
     this->m_PythonContext = std::make_unique<Python>(
-            this->m_Properties[keys::MODEL_PATH],
-            this->m_Properties[keys::SCRIPT_PATH],
-            this->m_Properties[keys::SCRIPT_NAME]
+            const_cast<char *>(this->m_Properties[keys::MODEL_PATH].c_str()),
+            const_cast<char *>(this->m_Properties[keys::SCRIPT_PATH].c_str()),
+            const_cast<char *>(this->m_Properties[keys::SCRIPT_NAME].c_str())
     );
     logger->debug("{}", " <<<<<<<<<<<<<<<<<<< done");
+#endif
 
 #ifdef RABBITMQ
     std::cout << "\n\t\033[31m =================== Load MQ Context ============\033[0m\n";
@@ -210,7 +214,11 @@ void PCAPParser::perform_predict(const u_char *packet, const struct pcap_pkthdr 
     }
     auto bitstring = oss.str();
     logger->debug("in function: {}", __PRETTY_FUNCTION__);
+#ifndef CAP_ONLY
     std::string label = this->m_PythonContext->predict(bitstring);
+#else
+    std::string label = "EARLY RETURN";
+#endif
 
     nlohmann::json result = {
             {"timestamp",  pcap_header->ts.tv_sec},
@@ -229,7 +237,9 @@ void PCAPParser::perform_predict(const u_char *packet, const struct pcap_pkthdr 
         this->publish_message(out.str().c_str());
 #endif
         logger->debug("分类结果: {}", label);
+#ifndef NO_KAFKA
         this->m_kafkaProducer->pushMessage(result.dump(), "");
+#endif
         DEBUG_CALL(std::cout << result.dump() << std::endl);
         logger->debug("json -> kafka: {}", result.dump());
     }

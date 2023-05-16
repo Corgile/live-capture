@@ -18,15 +18,15 @@ using PythonObject = PyObject *;
 class Python {
 
 public:
-    Python(std::string , std::string , std::string );
+    Python(char *, char *, char *);
 
     ~Python();
 
-    std::string predict(const std::string &bit_string);
+    std::string predict(std::string &bit_string);
 
     void *operator new(size_t size);
 
-    void operator delete(void* p);
+    void operator delete(void *p);
 
 private:
     static void InitPythonInterpreter();
@@ -35,16 +35,21 @@ private:
 
     void _init_required_module();
 
-    std::string _call_perform_predict(const std::string &bit_string);
+    std::string _call_perform_predict(std::string &bit_string);
 
     PythonObject m_Model;
-    PythonObject m_Functions;
     PythonObject m_RequiredModules{};
 
-    std::string m_Model_path;
-    std::string m_Py_module_path;
-    std::string m_Py_module_name;
+    char *m_Model_path;
+    char *m_Py_module_path;
+    char *m_Py_module_name;
     std::shared_ptr<DailyLogger> logger = DailyLogger::getInstance();
+    // ======
+    PythonObject m_prediction;
+    PythonObject m_load_model;
+    PythonObject pArgs;
+    PythonObject result;
+    PythonObject pArg_model_path;
 
 };
 

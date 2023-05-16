@@ -23,8 +23,11 @@ link_directories(${Python3_LIBRARY_DIRS})
 set(IF_DEBUG "" CACHE STRING "是否打印调试信息")
 set(IF_INFO "" CACHE STRING "是否打印一般信息")
 set(IF_WARN "" CACHE STRING "是否打印警告信息")
+set(IF_CAP_ONLY "" CACHE STRING "是否跳过预测")
+set(IF_NO_KAFKA "" CACHE STRING "是否跳过预测")
+
 # 使用变量来设置宏定义
-add_compile_definitions(${IF_DEBUG} ${IF_WARN} ${IF_INFO})
+add_compile_definitions(${IF_DEBUG} ${IF_WARN} ${IF_INFO} ${IF_CAP_ONLY} ${IF_NO_KAFKA})
 
 
 # all public header for all source files

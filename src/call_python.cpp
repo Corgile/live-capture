@@ -7,21 +7,25 @@
 
 #include <utility>
 
-std::string Python::predict(const std::string &bit_string) {
+std::string Python::predict(std::string &bit_string) {
     return this->_call_perform_predict(bit_string);
 }
 
 void Python::_init_required_module() {
     //引入当前路径,否则下面模块不能正常导入
-    char tempPath[256] = {};
-    sprintf(tempPath, "sys.path.append('%s')", this->m_Py_module_path.c_str());
+    char tempPath[256]={ };
+    sprintf(tempPath, "sys.path.append('%s')", this->m_Py_module_path);
+    delete this->m_Py_module_path;
+    this->m_Py_module_path=nullptr;
+
+    std::cout << __PRETTY_FUNCTION__ << ":" << __LINE__ << std::endl;
     PyRun_SimpleString("import sys");
     PyRun_SimpleString("import numpy as np");
     PyRun_SimpleString("from keras.models import load_model");
     PyRun_SimpleString("sys.path.append('./')");
     PyRun_SimpleString(tempPath);
 
-    this->m_RequiredModules = PyImport_ImportModule(this->m_Py_module_name.c_str());
+    this->m_RequiredModules=PyImport_ImportModule(this->m_Py_module_name);
 
     if (py_object(this->m_RequiredModules) == nullptr) {
         PyErr_Print();
@@ -34,35 +38,29 @@ void Python::_init_required_module() {
 
 
 Python::~Python() {
+    Py_DecRef(this->m_Model);
+    Py_DecRef(this->m_RequiredModules);
     delete this->m_Model;
-    delete this->m_Functions;
     delete this->m_RequiredModules;
     Python::FreePythonInterpreter();
-
-    Py_DECREF(this->m_Model);
-    Py_DECREF(this->m_Functions);
-    Py_DECREF(this->m_RequiredModules);
 }
 
-Python::Python(std::string model_path,
-               std::string module_path,
-               std::string module_name)
-        : m_Model_path(std::move(model_path)),
-          m_Py_module_path(std::move(module_path)),
-          m_Py_module_name(std::move(module_name)) {
+Python::Python(char *model_path, char *module_path, char *module_name)
+        : m_Model_path(model_path),
+          m_Py_module_path(module_path),
+          m_Py_module_name(module_name) {
 
     Python::InitPythonInterpreter();
+    std::cout << __PRETTY_FUNCTION__ << ":" << __LINE__ << std::endl;
     this->_init_required_module();
     //    //获取模块字典属性
-    PythonObject py_module_dict(_functions) = PyModule_GetDict(this->m_RequiredModules);
-    if (py_module_dict(_functions) == nullptr) {
+    PythonObject _functions=PyModule_GetDict(this->m_RequiredModules);
+    if (_functions == nullptr) {
         std::cout << __FILE__ << ":" << __LINE__ << " PyModule_GetDict error" << std::endl;
         PyErr_Print();
         logger->error("Get Module_Dict Error: {}", __PRETTY_FUNCTION__);
         exit(EXIT_FAILURE);
     }
-    this->m_Functions = py_module_dict(_functions);
-
 #ifdef FUCK
 #pragma region TEST
     PyObject *pDict = PyModule_GetDict(this->m_RequiredModules);
@@ -83,50 +81,57 @@ Python::Python(std::string model_path,
 #pragma endregion
 #endif
     //直接获取模块中的函数
-    PythonObject py_function(load_model) = PyDict_GetItemString(this->m_Functions, "load_model");
-    if (py_function(load_model) == nullptr) {
+    m_load_model=PyDict_GetItemString(_functions, "load_model");
+    std::cout << __PRETTY_FUNCTION__ << ":" << __LINE__ << std::endl;
+    if (m_load_model == nullptr) {
         std::cout << __FILE__ << ":" << __LINE__
                   << "PyDict_GetItemString 'load_model' not found" << std::endl;
         PyErr_Print();
         logger->error("Get Dict Item(String) `load_model` Error: {}", __PRETTY_FUNCTION__);
         exit(EXIT_FAILURE);
     }
-    PythonObject pArg_model_path = Py_BuildValue("s", this->m_Model_path.c_str());
 
-    this->m_Model = PyObject_CallFunction(load_model, "O", pArg_model_path);
-}
+    {
+        pArg_model_path=Py_BuildValue("s", this->m_Model_path);
+        this->m_Model=PyObject_CallFunction(m_load_model, "O", pArg_model_path);
+        Py_DecRef(pArg_model_path);
+    }
 
-std::string Python::_call_perform_predict(const std::string &bit_string) {
-    //直接获取模块中的函数
-    PythonObject py_function(prediction) = PyDict_GetItemString(this->m_Functions, "perform_predict");
-    if (py_function(prediction) == nullptr) {
+    this->m_prediction=PyDict_GetItemString(_functions, "perform_predict");
+    if (py_function(m_prediction) == nullptr) {
         std::cout << __FILE__ << ":" << __LINE__
                   << ": PyDict_GetItemString 'perform_predict' not found" << std::endl;
         PyErr_Print();
         logger->error("Get Dict Item(String) `perform_predict` Error: {}", __PRETTY_FUNCTION__);
         exit(EXIT_FAILURE);
     }
-    PythonObject py_object(pBitString) = PyUnicode_FromString(bit_string.c_str());
-    PythonObject py_object(pArgs) = PyTuple_New(2);
-    PyTuple_SetItem(py_object(pArgs), 0, this->m_Model);
-    PyTuple_SetItem(py_object(pArgs), 1, py_object(pBitString));
 
-    PythonObject py_object(result) = PyObject_CallObject(prediction, pArgs);
+    pArgs=PyTuple_New(2);
+    PyTuple_SetItem(pArgs, 0, this->m_Model);
+}
 
+std::string Python::_call_perform_predict(std::string &bit_string) {
+
+    PyGILState_STATE g_state {PyGILState_Ensure()};
+    PythonObject bitstring {PyUnicode_FromString(bit_string.c_str())};
+    PyTuple_SetItem(pArgs, 1, bitstring);
+
+    PyGILState_Release(g_state);
+    result=PyObject_CallObject(this->m_prediction, pArgs);
     // 检查返回值类型是否为字符串类型
     if (!PyUnicode_Check(result)) {
         PyErr_Print();
         logger->error("返回值错误: {}", __PRETTY_FUNCTION__);
         exit(EXIT_FAILURE);
     }
-    // 将 Python 字符串转换为 C 字符串
-    auto label = PyUnicode_AsUTF8(result);
+    auto label=PyUnicode_AsUTF8(result);
     if (label == nullptr) {
         PyErr_Print();
         std::cout << __FILE__ << ":" << __LINE__ << std::endl;
         logger->error("将 Python 字符串转换为 C 字符串，错误: {}", __PRETTY_FUNCTION__);
         exit(EXIT_FAILURE);
     }
+    Py_XDECREF(result);
     return label;
 }
 
