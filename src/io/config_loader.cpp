@@ -2,7 +2,7 @@
 // Created by gzhuadmin on 23-5-12.
 //
 
-#include "config_loader.hpp"
+#include "io/config_loader.hpp"
 #include "constants.hpp"
 
 ConfigLoader::ConfigLoader(const std::string &m_config_file_path) {

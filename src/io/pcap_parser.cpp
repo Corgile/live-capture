@@ -2,7 +2,7 @@
 #include <utility>
 #include <thread>
 #include <nlohmann/json.hpp>
-#include "pcap_parser.hpp"
+#include "io/pcap_parser.hpp"
 #include "common_macros.hpp"
 
 #define ETH_HEADER_LEN  sizeof(struct ether_header)
@@ -17,14 +17,20 @@ using udp_header_t = const struct udphdr *;
 using icmp_header_t = const struct icmphdr *;
 
 char err_buf[PCAP_ERRBUF_SIZE];
+static long long packet_count = 0;
+static long long byte_count = 0;
+static long long non_benign = 0;
+static long long num_151 = 0;
 
 
 void PCAPParser::perform() {
-    std::unique_ptr<pcap_t, void (*)(pcap_t *)> handle{this->open_live_handle(), &pcap_close};
-    auto device = handle.get();
-    this->m_LinkType = pcap_datalink(device);
-    pcap_set_promisc(device, 1);
-    pcap_loop(device, 0, packet_handler, reinterpret_cast<callback_data_t>(this));
+    this->m_handle = this->open_live_handle();
+    //    auto device = m_handle.get();
+    this->m_LinkType = pcap_datalink(m_handle);
+    pcap_set_promisc(m_handle, 1);
+    m_start_time = std::chrono::steady_clock::now();
+    pcap_loop(m_handle, 0, packet_handler, reinterpret_cast<callback_data_t>(this));
+    pcap_close(this->m_handle);
 }
 
 void PCAPParser::packet_handler(callback_data_t callbackData, const struct pcap_pkthdr *packet_header,
@@ -45,7 +51,9 @@ void PCAPParser::packet_handler(callback_data_t callbackData, const struct pcap_
 
     callback_data->write_output(pSuperPacket);
     callback_data->perform_predict(packet, packet_header);
-    callback_data->bitstring_vec.clear();
+    callback_data->bit_vec.clear();
+    packet_count++;
+    byte_count += packet_header->len;
 }
 
 std::shared_ptr<SuperPacket> PCAPParser::process_packet(void *packet) {
@@ -75,7 +83,7 @@ pcap_t *PCAPParser::open_live_handle() {
         logger->debug("使用网卡: {}", this->m_Properties[keys::DEVICE_NAME]);
     }
     const char *dev_name = this->m_Properties[keys::DEVICE_NAME].c_str();
-    struct bpf_program fp{};
+    struct bpf_program fp { };
     char filter_exp[] = "tcp or udp or icmp";
     bpf_u_int32 net, mask;
     pcap_t *device_handle = pcap_open_live(dev_name, BUFSIZ, 1, 1000, err_buf);
@@ -86,15 +94,15 @@ pcap_t *PCAPParser::open_live_handle() {
 }
 
 PCAPParser::PCAPParser(Config config, const std::string &config_file_path)
-        : m_Config(std::move(config)) {
+        : m_Config(std::move(config)), m_handle() {
 
     logger->debug(" >>>>>>>>>>>>>>>>>>> Loading properties: {}", config_file_path);
     SCOPE_START
         auto loader = std::make_unique<ConfigLoader>(config_file_path);
         this->m_Properties = loader->get_conf();
     SCOPE_END
+    RED(" Config loaded. ");
     logger->debug("Loading {} has done", config_file_path);
-
     std::unique_ptr<pcap_if_t, pcap_if_t_deleter> alldevs;
     auto devices = alldevs.get();
     int ret = pcap_findalldevs(&devices, err_buf);
@@ -106,7 +114,7 @@ PCAPParser::PCAPParser(Config config, const std::string &config_file_path)
 
     // 输出网卡列表
     if (!this->m_Properties[keys::DEVICE_NAME].empty()) {
-        bool found{false};
+        bool found {false};
         for (auto d = alldevs.get(); d != nullptr; d = d->next) {
             found = d->name == this->m_Properties[keys::DEVICE_NAME];
             if (found) break;
@@ -131,11 +139,10 @@ PCAPParser::PCAPParser(Config config, const std::string &config_file_path)
     logger->debug("{}", " <<<<<<<<<<<<<<<<<<< done");
 #endif
 #ifndef CAP_ONLY
+    RED(" Loading Python context ");
     logger->debug("{}", " >>>>>>>>>>>>>>>>>>> Loading Python context");
-    this->m_PythonContext = std::make_unique<Python>(
-            const_cast<char *>(this->m_Properties[keys::MODEL_PATH].c_str()),
-            const_cast<char *>(this->m_Properties[keys::SCRIPT_PATH].c_str()),
-            const_cast<char *>(this->m_Properties[keys::SCRIPT_NAME].c_str())
+    this->m_torch_api = std::make_unique<TorchAPI>(
+            this->m_Properties[keys::MODEL_PATH]
     );
     logger->debug("{}", " <<<<<<<<<<<<<<<<<<< done");
 #endif
@@ -154,8 +161,16 @@ PCAPParser::~PCAPParser() {
 }
 
 void PCAPParser::perform_predict(const u_char *packet, const struct pcap_pkthdr *pcap_header) {
+    if (std::chrono::duration_cast<std::chrono::seconds>(std::chrono::steady_clock::now() - m_start_time).count() >=
+        300) {
+        pcap_breakloop(m_handle);
+        RED(packet_count);
+        RED(non_benign);
+        RED(num_151);
+    }
 
-    /** extract as IP packet and resolve the IPs */
+#pragma region SOMETHING
+    /** extract as IP headers and resolve the IPs */
     auto ip_packet_header = reinterpret_cast<ip_header_t> (packet + ETH_HEADER_LEN);
     /** 处理 IP 地址 */
     logger->debug("{}", "处理 IP 地址");
@@ -165,6 +180,10 @@ void PCAPParser::perform_predict(const u_char *packet, const struct pcap_pkthdr 
     inet_ntop(AF_INET, &(ip_packet_header->daddr), dst_ip, INET_ADDRSTRLEN);
     logger->debug("src IP: {}", src_ip);
     logger->debug("dst IP: {}", dst_ip);
+    if ("192.168.1.51" == std::string(src_ip)) {
+        num_151++;
+                return;
+    }
 
     /** get_conf the IP header length */
     size_t ip_hdr_len = (ip_packet_header->ihl) * 4;
@@ -207,32 +226,32 @@ void PCAPParser::perform_predict(const u_char *packet, const struct pcap_pkthdr 
 #pragma endregion
 
 #pragma region Jsonify
-    std::ostringstream oss;
-    for (int i = 0; i < this->bitstring_vec.size(); ++i) {
-        if (i != 0) oss << ",";
-        oss << int(this->bitstring_vec[i]);
-    }
-    auto bitstring = oss.str();
-    logger->debug("in function: {}", __PRETTY_FUNCTION__);
+
 #ifndef CAP_ONLY
-    std::string label = this->m_PythonContext->predict(bitstring);
+    auto tensor {torch::from_blob(this->bit_vec.data(), {1, 128, 1}, at::kFloat)};
+    tensor = tensor.transpose(1, 2);
+    //    exit(EXIT_SUCCESS);
+    std::vector<torch::jit::IValue> inputs(1, tensor);
+    std::string label {this->m_torch_api->predict(inputs)};
+    this->bit_vec.clear();
 #else
     std::string label = "EARLY RETURN";
 #endif
 
     nlohmann::json result = {
-            {"timestamp",  pcap_header->ts.tv_sec},
-            {"u_sec",      pcap_header->ts.tv_usec},
+            {"srcIp",      src_ip},
             {"attackType", label},
             {"dstIp",      dst_ip},
-            {"dstPort",    dst_port},
-            {"srcIp",      src_ip},
             {"srcPort",    src_port},
-            {"protocol",   protocol}
+            {"dstPort",    dst_port},
+            {"protocol",   protocol},
+            {"timestamp",  pcap_header->ts.tv_sec},
+            {"u_sec",      pcap_header->ts.tv_usec},
     };
 #pragma endregion
 
     if (label != "benign") {
+        non_benign++;
 #ifdef RABBITMQ
         this->publish_message(out.str().c_str());
 #endif
@@ -240,13 +259,13 @@ void PCAPParser::perform_predict(const u_char *packet, const struct pcap_pkthdr 
 #ifndef NO_KAFKA
         this->m_kafkaProducer->pushMessage(result.dump(), "");
 #endif
-        DEBUG_CALL(std::cout << result.dump() << std::endl);
+        DEBUG_CALL(std::cout << "\033[31m" << result.dump() << "\033[0m" << std::endl);
         logger->debug("json -> kafka: {}", result.dump());
     }
 }
 
 void PCAPParser::write_output(const std::shared_ptr<SuperPacket> &sp) {
-    sp->get_bitstring(&(this->m_Config), this->bitstring_vec);
+    sp->get_bitstring(&(this->m_Config), this->bit_vec);
 }
 
 #ifdef RABBIMQ
@@ -265,7 +284,7 @@ void PCAPParser::init_captor_args() {
                 + SIZE_TCP_HEADER_BITSTRING
                 + SIZE_UDP_HEADER_BITSTRING
                 + SIZE_ICMP_HEADER_BITSTRING;
-    this->bitstring_vec.reserve(size << 5);
+    this->bit_vec.reserve(size << 5);
 }
 
 void *PCAPParser::operator new(size_t size) {

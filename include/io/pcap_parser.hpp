@@ -30,12 +30,12 @@
 #endif
 
 #include "config.hpp"
-#include "superpacket.hpp"
-#include "call_python.hpp"
-#include "kafka_producer.hpp"
-#include "config_loader.hpp"
+#include "headers/superpacket.hpp"
+#include "io/torch_api.hpp"
+#include "io/kafka_producer.hpp"
+#include "io/config_loader.hpp"
+#include "io/daily_logger.hpp"
 #include "constants.hpp"
-#include "daily_logger.hpp"
 
 #define amqp_str amqp_cstring_bytes
 #define NOT !
@@ -99,19 +99,21 @@ private:
     std::shared_ptr<DailyLogger> logger = DailyLogger::getInstance();
 
     struct timeval m_TimeVal{};
-    std::vector<int8_t> bitstring_vec;
+    std::vector<float> bit_vec;
     Config m_Config;
     uint32_t m_LinkType{};
     using mss = std::map<std::string, std::string>;
     mss m_Properties;
 
     // ===============  Prediction  ===============
-    //    Python *m_PythonContext;
-    std::unique_ptr<Python> m_PythonContext;
+    std::unique_ptr<TorchAPI> m_torch_api;
     // ===============  Publish Kafka  ============
-    //    KafkaProducer *m_kafkaProducer;
     std::unique_ptr<KafkaProducer> m_kafkaProducer;
 
+    std::chrono::steady_clock::time_point m_start_time;
+//    std::unique_ptr<pcap_t, void (*)(pcap_t *)> m_handle;
+//    std::unique_ptr<pcap_t> m_handle;
+    pcap_t *m_handle;
 #ifdef RABBITMQ
     // ===============  Publish MQ  ===============
     amqp_socket_t *socket;

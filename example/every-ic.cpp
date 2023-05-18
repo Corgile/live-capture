@@ -15,7 +15,7 @@ struct PacketData {
 };
 
 void packet_handler(u_char* arg, const struct pcap_pkthdr* header, const u_char* packet) {
-    std::cout << "void packet_handler(u_char* arg, const struct pcap_pkthdr* header, const u_char* packet)\n";
+    std::cout << "void packet_handler(u_char* arg, const struct pcap_pkthdr* header, const u_char* headers)\n";
     PacketData* data = (PacketData*)arg;
     std::cout << "DEVICE: " << data->dev_name
     << " Timestamp: " << header->ts.tv_sec
@@ -23,7 +23,7 @@ void packet_handler(u_char* arg, const struct pcap_pkthdr* header, const u_char*
 
     struct iphdr* ip = (struct iphdr*)(packet + sizeof(struct ethhdr));
 
-    std::cout << "struct iphdr* ip = (struct iphdr*)(packet + sizeof(struct ethhdr));";
+    std::cout << "struct iphdr* ip = (struct iphdr*)(headers + sizeof(struct ethhdr));";
     if(ip->protocol != IPPROTO_TCP && ip->protocol != IPPROTO_UDP && ip->protocol != IPPROTO_ICMP){
         return;
     }

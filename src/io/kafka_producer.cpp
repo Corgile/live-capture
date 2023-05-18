@@ -2,7 +2,7 @@
 // Created by gzhuadmin on 23-5-11.
 //
 
-#include "kafka_producer.hpp"
+#include "io/kafka_producer.hpp"
 
 // 构造生产者
 KafkaProducer::KafkaProducer(const std::string &brokers, const std::string &topic, int partition) {

@@ -117,7 +117,7 @@ void capture(const std::string& device) {
         if (res == -1) break; // 出错
         // 处理数据包，例如输出它的长度
         packet_handler(nullptr, packet_header, packet_body);
-//        std::cout << device << " Captured a packet of length " << packet_header->len <<  std::endl;
+//        std::cout << device << " Captured a headers of length " << packet_header->len <<  std::endl;
     }
 
     pcap_close(handle);

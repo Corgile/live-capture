@@ -9,11 +9,11 @@
 #include <string>
 #include <librdkafka/rdkafkacpp.h>
 
-#include "cb_producer_event.hpp"
-#include "cb_producer_delivery_report.hpp"
-#include "cb_hash_partitioner.hpp"
+#include "io/daily_logger.hpp"
+#include "callback/cb_producer_event.hpp"
+#include "callback/cb_producer_delivery_report.hpp"
+#include "callback/cb_hash_partitioner.hpp"
 #include "common_macros.hpp"
-#include "daily_logger.hpp"
 
 
 class KafkaProducer {

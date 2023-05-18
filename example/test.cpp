@@ -6,13 +6,13 @@
 #include "unistd.h"
 #define SNAP_LEN 65535
 
-/* prototype of the packet handler */
+/* prototype of the headers handler */
 void dispatcher_handler(u_char *temp1, const struct pcap_pkthdr *header, const u_char *pkt_data);
 void *thr_fn1(void *arg);
 void *thr_fn2(void *arg);
 void *thr_fn3(void *arg);
 
-pcap_t *handle1, *handle2;                /* packet capture handle */
+pcap_t *handle1, *handle2;                /* headers capture handle */
 int CAP_TIME = 600;
 pthread_t t1, t2, t3;
 
@@ -105,7 +105,7 @@ int main(int argc, char **argv)
 void dispatcher_handler(u_char *temp1,
                         const struct pcap_pkthdr *header, const u_char *pkt_data)
 {
-    printf("I get one packet!\n");
+    printf("I get one headers!\n");
 }
 void *thr_fn1(void *arg)
 {

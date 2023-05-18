@@ -9,7 +9,7 @@
 #include <map>
 #include <string>
 #include <fstream>
-#include "daily_logger.hpp"
+#include "io/daily_logger.hpp"
 
 class ConfigLoader {
 private:

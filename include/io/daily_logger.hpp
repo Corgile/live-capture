@@ -18,7 +18,7 @@ public:
 
     void info(const char *format, std::string args);
 
-    void debug(const char* fmt, const std::string & args);
+    void debug(const char *fmt, const std::string &args);
 
     void error(const char *format, std::string args);
 

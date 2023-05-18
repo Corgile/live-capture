@@ -2,10 +2,10 @@
 // Created by iot-xhl on 2023/4/21.
 //
 #include "config.hpp"
-#include "file_writer.hpp"
-#include "pcap_parser.hpp"
-#include "config_loader.hpp"
-#include "daily_logger.hpp"
+
+#include "io/pcap_parser.hpp"
+#include "io/config_loader.hpp"
+#include "io/daily_logger.hpp"
 
 int main(int argc, char **argv) {
     auto logger = DailyLogger::getInstance();
@@ -22,9 +22,8 @@ int main(int argc, char **argv) {
         logger->error("文件 [{}] 不存在或打不开", config_properties);
         exit(EXIT_FAILURE);
     }
-
+    RED("Config pcapConfig = Config::get_instance();");
     Config pcapConfig = Config::get_instance();
-    FileWriter file_writer(pcapConfig);
     PCAPParser pcap_parser(pcapConfig, config_properties);
     pcap_parser.perform();
     return 0;
