@@ -10,13 +10,13 @@
 #include <sys/types.h>
 
 #include "config.hpp"
-#include "ethernet_header.hpp"
-#include "icmp_header.hpp"
-#include "ipv4_header.hpp"
-#include "ipv6_header.hpp"
-#include "payload.hpp"
-#include "tcp_header.hpp"
-#include "udp_header.hpp"
+#include "headers/ethernet_header.hpp"
+#include "headers/icmp_header.hpp"
+#include "headers/ipv4_header.hpp"
+#include "headers/ipv6_header.hpp"
+#include "headers/payload.hpp"
+#include "headers/tcp_header.hpp"
+#include "headers/udp_header.hpp"
 
 /**
  * FileWriter takes care of output for all nPrints
