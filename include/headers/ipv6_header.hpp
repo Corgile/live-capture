@@ -19,7 +19,7 @@ class IPv6Header : public PacketHeader {
     void set_raw(void *raw) override;
     void print_header(FILE *out) override;
     uint32_t get_header_len() override;
-    void get_bitstring(std::vector<int8_t> &to_fill, int8_t fill_with) override;
+    void get_bitstring(std::vector<float> &to_fill, int8_t fill_with) override;
     void get_bitstring_header(std::vector<std::string> &to_fill) override;
 
     /* Header Specific */

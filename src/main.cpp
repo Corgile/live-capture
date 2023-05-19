@@ -6,6 +6,7 @@
 #include "io/pcap_parser.hpp"
 #include "io/config_loader.hpp"
 #include "io/daily_logger.hpp"
+#include "common_macros.hpp"
 
 int main(int argc, char **argv) {
     auto logger = DailyLogger::getInstance();

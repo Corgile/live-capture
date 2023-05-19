@@ -29,7 +29,7 @@ std::string IPv6Header::get_dst_ip() {
 	return std::string{s};
 }
 
-void IPv6Header::get_bitstring(std::vector<int8_t> &to_fill, int8_t fill_with) {
+void IPv6Header::get_bitstring(std::vector<float> &to_fill, int8_t fill_with) {
 	if (raw == nullptr) {
 		make_bitstring(SIZE_IPV6_HEADER_BITSTRING, nullptr, to_fill, fill_with);
 		return;

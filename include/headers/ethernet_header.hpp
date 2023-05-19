@@ -18,7 +18,7 @@ public:
 
 	uint32_t get_header_len() override;
 
-	void get_bitstring(std::vector<int8_t> &to_fill, int8_t fill_with) override;
+	void get_bitstring(std::vector<float> &to_fill, int8_t fill_with) override;
 
 	void get_bitstring_header(std::vector<std::string> &to_fill) override;
 

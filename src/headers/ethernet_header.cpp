@@ -26,7 +26,7 @@ uint32_t EthHeader::get_header_len() {
     return 14;
 }
 
-void EthHeader::get_bitstring(std::vector<int8_t> &to_fill, int8_t fill_with) {
+void EthHeader::get_bitstring(std::vector<float> &to_fill, int8_t fill_with) {
     make_bitstring(SIZE_ETH_HEADER_BITSTRING, raw, to_fill, fill_with);
 }
 

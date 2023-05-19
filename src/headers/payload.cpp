@@ -13,7 +13,7 @@ uint32_t Payload::get_header_len() {
     return n_bytes;
 }
 
-void Payload::get_bitstring(std::vector<int8_t> &to_fill, int8_t fill_with) {
+void Payload::get_bitstring(std::vector<float> &to_fill, int8_t fill_with) {
     int32_t zero_byte_width;
     zero_byte_width = max_payload_len - n_bytes;
     /* If no payload fill with max payload bytes */

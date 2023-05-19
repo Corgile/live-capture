@@ -25,7 +25,7 @@ public:
 
 	virtual uint32_t get_header_len() = 0;
 
-	virtual void get_bitstring(std::vector<int8_t> &to_fill,
+	virtual void get_bitstring(std::vector<float> &to_fill,
 	                           int8_t fill_with) = 0;
 
 	virtual void get_bitstring_header(std::vector<std::string> &to_fill) = 0;
@@ -35,7 +35,7 @@ public:
 	                         std::vector<std::string> &to_fill);
 
 	static void make_bitstring(uint32_t num_bytes, void *raw_data,
-	                           std::vector<int8_t> &to_fill,
+	                           std::vector<float> &to_fill,
 	                           int8_t fill_with = 0);
 
 	static void make_bitstring_header(

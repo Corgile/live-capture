@@ -123,7 +123,7 @@ bool SuperPacket::process_v6(void *pkt) {
     return true;
 }
 
-void SuperPacket::get_bitstring(Config *c, std::vector<int8_t> &bit_string_vec) {
+void SuperPacket::get_bitstring(Config *c, std::vector<float> &bit_string_vec) {
     if (c->eth == 1)
         ethernet_header.get_bitstring(bit_string_vec, c->fill_with);
     if (c->ipv4 == 1)

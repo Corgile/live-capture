@@ -24,4 +24,6 @@
 #define WARN_CALL(x)
 #endif
 
+#define RED(x) std::cout << "\n\33[31m=================" << x << "=================\033[0m\n\n"
+
 #endif //LIVE_CAPTURE_COMMON_MACROS_HPP

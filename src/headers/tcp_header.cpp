@@ -21,7 +21,7 @@ uint32_t TCPHeader::get_header_len() {
     return raw->th_off * 4;
 }
 
-void TCPHeader::get_bitstring(std::vector<int8_t> &to_fill, int8_t fill_with) {
+void TCPHeader::get_bitstring(std::vector<float> &to_fill, int8_t fill_with) {
 	uint32_t tcp_header_byte_size, zero_byte_width;
 
 	if (raw == nullptr) {

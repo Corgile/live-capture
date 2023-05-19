@@ -17,7 +17,7 @@ void PacketHeader::ascii_encode(unsigned char *ptr, uint32_t num_bytes,
 }
 
 void PacketHeader::make_bitstring(uint32_t num_bytes, void *raw_data,
-                                  std::vector<int8_t> &to_fill,
+                                  std::vector<float> &to_fill,
                                   int8_t fill_with) {
 	uint8_t *byte, bit;
 	uint32_t i;

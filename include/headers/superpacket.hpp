@@ -27,7 +27,7 @@ class SuperPacket {
     void print_packet(FILE *out);
     bool check_parseable() const;
     std::tuple<uint8_t, uint8_t> get_packet_type();
-    void get_bitstring(Config *c, std::vector<int8_t> &bit_string_vec);
+    void get_bitstring(Config *c, std::vector<float> &bit_string_vec);
     std::string get_index(Config *c);
 
   private:

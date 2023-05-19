@@ -17,7 +17,7 @@ void ICMPHeader::print_header(FILE *out) {
 	}
 }
 
-void ICMPHeader::get_bitstring(std::vector<int8_t> &to_fill, int8_t fill_with) {
+void ICMPHeader::get_bitstring(std::vector<float> &to_fill, int8_t fill_with) {
 	if (raw == nullptr) {
 		make_bitstring(SIZE_ICMP_HEADER_BITSTRING, nullptr, to_fill, fill_with);
 		return;

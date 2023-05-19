@@ -23,7 +23,7 @@ uint32_t UDPHeader::get_header_len() {
     return 8;
 }
 
-void UDPHeader::get_bitstring(std::vector<int8_t> &to_fill, int8_t fill_with) {
+void UDPHeader::get_bitstring(std::vector<float> &to_fill, int8_t fill_with) {
     make_bitstring(SIZE_UDP_HEADER_BITSTRING, raw, to_fill, fill_with);
 }
 

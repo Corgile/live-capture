@@ -19,7 +19,7 @@ uint32_t IPv4Header::get_header_len() {
     return raw->ip_hl * 4;
 }
 
-void IPv4Header::get_bitstring(std::vector<int8_t> &to_fill, int8_t fill_with) {
+void IPv4Header::get_bitstring(std::vector<float> &to_fill, int8_t fill_with) {
 	uint32_t ip_header_byte_size, zero_byte_width;
 
 	if (raw == nullptr) {
