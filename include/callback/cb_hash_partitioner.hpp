@@ -21,6 +21,7 @@ public:
 private:
     // 自定义哈希函数
     static inline unsigned int generate_hash(const char *str, size_t len);
+
     std::shared_ptr<DailyLogger> logger = DailyLogger::getInstance();
 };
 

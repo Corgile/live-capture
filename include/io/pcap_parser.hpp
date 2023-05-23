@@ -30,12 +30,13 @@
 #endif
 
 #include "config.hpp"
-#include "headers/superpacket.hpp"
+#include "packet/superpacket.hpp"
 #include "io/torch_api.hpp"
 #include "io/kafka_producer.hpp"
 #include "io/config_loader.hpp"
 #include "io/daily_logger.hpp"
 #include "constants.hpp"
+#include "common.hpp"
 
 #define amqp_str amqp_cstring_bytes
 #define NOT !
@@ -45,31 +46,23 @@
  * Parses a PCAP from a written file
  */
 
-class PCAPParser {
+class Captor {
 public:
 
-    explicit PCAPParser(Config config, const std::string &);
+    explicit Captor(Config config, const std::string &);
 
-    ~PCAPParser();
+    ~Captor() = default;
 
     void perform();
 
 
 private:
 
-    void init_captor_args();
-
     static void packet_handler(u_char *user_data, const struct pcap_pkthdr *packet_header, const u_char *packet);
 
-    [[nodiscard]] pcap_t *open_live_handle();
+    void init_live_handle();
 
-    std::shared_ptr<SuperPacket> process_packet(void *packet);
-
-    void perform_predict(const u_char *packet, const struct pcap_pkthdr *);
-
-    void write_output(const std::shared_ptr<SuperPacket> &sp);
-
-    void *operator new(size_t size);
+    void perform_predict(raw_data_t packet, const struct pcap_pkthdr *);
 
     struct pcap_if_t_deleter {
         void operator()(pcap_if_t *p) const {
@@ -77,43 +70,24 @@ private:
         }
     };
 
-#ifdef RABBITMQ
-    //=========== Publish MQ =============
-    bool load_mq_context();
-
-    bool init_connection();
-    bool configure_socket();
-    bool connect_to_server();
-    bool login();
-    bool declare_queue();
-    bool bind_queue_to_exchange();
-    bool publish_message(const char*);
-    void cleanup_mq_transactions();
-
-    static bool check_last_status(amqp_response_type_enum, std::string&);
-#endif
-
-
 private:
 
-    std::shared_ptr<DailyLogger> logger = DailyLogger::getInstance();
+    std::shared_ptr<DailyLogger> m_logger = DailyLogger::getInstance();
 
-    struct timeval m_TimeVal{};
     std::vector<float> bit_vec;
-    Config m_Config;
-    uint32_t m_LinkType{};
-    using mss = std::map<std::string, std::string>;
-    mss m_Properties;
+    Config m_config;
+    uint32_t m_link_type{ };
+    std::map<std::string, std::string> m_props;
 
     // ===============  Prediction  ===============
     std::unique_ptr<TorchAPI> m_torch_api;
     // ===============  Publish Kafka  ============
-    std::unique_ptr<KafkaProducer> m_kafkaProducer;
-
+    std::unique_ptr<KafkaProducer> m_kafka_producer;
+#ifdef FOR_TEST
     std::chrono::steady_clock::time_point m_start_time;
-//    std::unique_ptr<pcap_t, void (*)(pcap_t *)> m_handle;
-//    std::unique_ptr<pcap_t> m_handle;
-    pcap_t *m_handle;
+#endif
+    //    pcap_t *m_handle;
+    std::shared_ptr<pcap_t> m_handle;
 #ifdef RABBITMQ
     // ===============  Publish MQ  ===============
     amqp_socket_t *socket;

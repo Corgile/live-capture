@@ -6,7 +6,7 @@
 
 #include <utility>
 
-char const *labels[8]={
+char const *labels[8] = {
         "benign",
         "ddos",
         "dos",
@@ -22,10 +22,10 @@ TorchAPI::TorchAPI(std::string model_path) : m_model_path(std::move(model_path))
 
 std::string TorchAPI::predict(std::vector<torch::jit::IValue> &inputs) {
     torch::Device device(torch::kCPU);
-    torch::jit::script::Module model=torch::jit::load(this->m_model_path);
+    torch::jit::script::Module model = torch::jit::load(this->m_model_path);
     model.to(device);
-    at::Tensor output=model.forward(inputs).toTensor();
-    auto index=torch::argmax(output, 1).item<long>();
+    at::Tensor output = model.forward(inputs).toTensor();
+    auto index = torch::argmax(output, 1).item<long>();
     return labels[index];
 }
 

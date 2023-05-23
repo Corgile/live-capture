@@ -3,190 +3,150 @@
 #include <thread>
 #include <nlohmann/json.hpp>
 #include "io/pcap_parser.hpp"
-#include "common_macros.hpp"
+#include "packet/superpacket.hpp"
+#include "common.hpp"
 
-#define ETH_HEADER_LEN  sizeof(struct ether_header)
-#define SCOPE_START {
-#define SCOPE_END   }
-
-using callback_data_t = u_char *;
-using tcp_header_t = const struct tcphdr *;
-using eth_header_t = const struct ether_header *;
-using ip_header_t = const struct iphdr *;
-using udp_header_t = const struct udphdr *;
-using icmp_header_t = const struct icmphdr *;
+#define ETH_HEADER_LEN      sizeof(struct ether_header)
+#define SCOPE_START         {
+#define SCOPE_END           }
+#define PROMIDCUOUS_MODE    1
+#define READ_PKT_TIMEOUT    200
 
 char err_buf[PCAP_ERRBUF_SIZE];
-static long long packet_count = 0;
-static long long byte_count = 0;
-static long long non_benign = 0;
-static long long num_151 = 0;
 
+Captor::Captor(Config config, const std::string &config_file_path) : m_config(std::move(config)) {
 
-void PCAPParser::perform() {
-    this->m_handle = this->open_live_handle();
-    //    auto device = m_handle.get();
-    this->m_LinkType = pcap_datalink(m_handle);
-    pcap_set_promisc(m_handle, 1);
-    m_start_time = std::chrono::steady_clock::now();
-    pcap_loop(m_handle, 0, packet_handler, reinterpret_cast<callback_data_t>(this));
-    pcap_close(this->m_handle);
+    m_logger->debug(" >>>>>>>>>>>>>>>>>>> Loading properties: {}", config_file_path);
+    SCOPE_START
+        auto loader = std::make_unique<ConfigLoader>(config_file_path);
+        this->m_props = loader->get_conf();
+    SCOPE_END
+    m_logger->debug("Loading {} has done", config_file_path);
+    std::unique_ptr<pcap_if_t, pcap_if_t_deleter> alldevs;
+    auto devices = alldevs.get();
+    int ret = pcap_findalldevs(&devices, err_buf);
+    if (ret != 0) {
+        m_logger->error("查找网卡设备失败: {}", err_buf);
+        exit(EXIT_FAILURE);
+    }
+
+    if (!this->m_props[keys::DEVICE_NAME].empty()) {
+        bool found{false};
+        for (auto d = alldevs.get(); d != nullptr; d = d->next) {
+            found = d->name == this->m_props[keys::DEVICE_NAME];
+            if (found) break;
+        }
+        if (!found) {
+            m_logger->error("找不到网卡设备: {}", this->m_props[keys::DEVICE_NAME]);
+            exit(EXIT_FAILURE);
+        }
+    }
+    alldevs.reset();
+    m_logger->debug("{}", " >>>>>>>>>>>>>>>>>>> Init Captor Args");
+
+    auto size = SIZE_IPV4_HEADER_BITSTRING
+                + SIZE_TCP_HEADER_BITSTRING
+                + SIZE_UDP_HEADER_BITSTRING
+                + SIZE_ICMP_HEADER_BITSTRING;
+    this->bit_vec.reserve(size << 5);
+    m_logger->debug("{}", " <<<<<<<<<<<<<<<<<<< done");
+    m_logger->debug("{}", " >>>>>>>>>>>>>>>>>>> Loading Kafka context");
+    this->m_kafka_producer = std::make_unique<KafkaProducer>(
+            this->m_props[keys::KAFKA_BROKERS],
+            this->m_props[keys::KAFKA_TOPIC],
+            std::stoi(this->m_props[keys::KAFKA_PARTITION])
+    );
+    m_logger->debug("{}", " <<<<<<<<<<<<<<<<<<< done");
+    m_logger->debug("{}", " >>>>>>>>>>>>>>>>>>> Loading torch_api");
+    this->m_torch_api = std::make_unique<TorchAPI>(
+            this->m_props[keys::MODEL_PATH]
+    );
+    m_logger->debug("{}", " <<<<<<<<<<<<<<<<<<< done");
+
 }
 
-void PCAPParser::packet_handler(callback_data_t callbackData, const struct pcap_pkthdr *packet_header,
-                                const u_char *packet) {
+void Captor::perform() {
+    this->init_live_handle();
+    this->m_link_type = pcap_datalink(m_handle.get());
+#ifdef FOR_TEST
+    m_start_time = std::chrono::steady_clock::now();
+#endif
+    pcap_loop(m_handle.get(), 0, packet_handler, reinterpret_cast<callback_data_t>(this));
+    pcap_close(this->m_handle.get());
+}
+
+void Captor::packet_handler(callback_data_t callbackData,
+                            const struct pcap_pkthdr *pcap_header,
+                            const u_char *packet) {
     struct vlan_hdr {
         uint32_t v1;
     };
     auto ethernet_header = reinterpret_cast<eth_header_t>(packet);
     if (ntohs(ethernet_header->ether_type) == ETHERTYPE_VLAN) {
-        packet = (u_char *) (packet + sizeof(struct vlan_hdr));
+        packet = packet + sizeof(struct vlan_hdr);
     }
-    auto callback_data = reinterpret_cast<PCAPParser *>(callbackData);
-    if (callback_data->m_LinkType == DLT_LINUX_SLL) {
-        packet = (uint8_t *) packet + LINUX_COOKED_HEADER_SIZE;
+    auto callback = reinterpret_cast<Captor *>(callbackData);
+    if (callback->m_link_type == DLT_LINUX_SLL) {
+        packet = packet + LINUX_COOKED_HEADER_SIZE;
     }
-    std::shared_ptr<SuperPacket> pSuperPacket = callback_data->process_packet((void *) packet);
-    if (pSuperPacket == nullptr) return;
-
-    callback_data->write_output(pSuperPacket);
-    callback_data->perform_predict(packet, packet_header);
-    callback_data->bit_vec.clear();
-    packet_count++;
-    byte_count += packet_header->len;
-}
-
-std::shared_ptr<SuperPacket> PCAPParser::process_packet(void *packet) {
-    return std::make_shared<SuperPacket>(packet, this->m_Config.max_payload_len, this->m_LinkType);
+    callback->perform_predict(packet, pcap_header);
 }
 
 
-pcap_t *PCAPParser::open_live_handle() {
+void Captor::init_live_handle() {
     std::unique_ptr<pcap_if_t, pcap_if_t_deleter> find_device_handle;
-
-    if (this->m_Properties[keys::DEVICE_NAME].empty()) {
+    if (this->m_props[keys::DEVICE_NAME].empty()) {
         auto device = find_device_handle.get();
         int32_t rv = pcap_findalldevs(&device, err_buf);
         if (rv == -1) {
-            DEBUG_CALL(std::cerr << "默认设备查询失败: " << err_buf << std::endl);
-            logger->error("默认设备查询失败: {}", err_buf);
+            m_logger->error("默认设备查询失败: {}", err_buf);
             exit(EXIT_FAILURE);
         }
-        this->m_Properties[keys::DEVICE_NAME] = device->name;
-
+        this->m_props[keys::DEVICE_NAME] = device->name;
         DEBUG_CALL(std::cout << "\n ===== \033[1;31m 使用默认网卡: " << device->name << "\033[0m\n\n");
-        logger->debug("使用默认网卡: {}", device->name);
+        m_logger->debug("使用默认网卡: {}", device->name);
     } else {
         DEBUG_CALL(std::cout << "\n ===== \033[1;31m 使用网卡: "
-                             << this->m_Properties[keys::DEVICE_NAME]
+                             << this->m_props[keys::DEVICE_NAME]
                              << " =====\033[0m\n\n");
-        logger->debug("使用网卡: {}", this->m_Properties[keys::DEVICE_NAME]);
+        m_logger->debug("使用网卡: {}", this->m_props[keys::DEVICE_NAME]);
     }
-    const char *dev_name = this->m_Properties[keys::DEVICE_NAME].c_str();
-    struct bpf_program fp { };
+    const char *dev_name = this->m_props[keys::DEVICE_NAME].c_str();
+    struct bpf_program fp{ };
     char filter_exp[] = "tcp or udp or icmp";
     bpf_u_int32 net, mask;
-    pcap_t *device_handle = pcap_open_live(dev_name, BUFSIZ, 1, 1000, err_buf);
+    //    pcap_t *device_handle = pcap_open_live(dev_name, BUFSIZ, PROMIDCUOUS_MODE, READ_PKT_TIMEOUT, err_buf);
+    this->m_handle = {pcap_open_live(dev_name, BUFSIZ, PROMIDCUOUS_MODE, READ_PKT_TIMEOUT, err_buf), pcap_close};
+    pcap_set_promisc(m_handle.get(), PROMIDCUOUS_MODE);
     pcap_lookupnet(dev_name, &net, &mask, err_buf);
-    pcap_compile(device_handle, &fp, filter_exp, 0, net);
-    pcap_setfilter(device_handle, &fp);
-    return device_handle;
+    pcap_compile(m_handle.get(), &fp, filter_exp, 0, net);
+    pcap_setfilter(m_handle.get(), &fp);
 }
 
-PCAPParser::PCAPParser(Config config, const std::string &config_file_path)
-        : m_Config(std::move(config)), m_handle() {
-
-    logger->debug(" >>>>>>>>>>>>>>>>>>> Loading properties: {}", config_file_path);
-    SCOPE_START
-        auto loader = std::make_unique<ConfigLoader>(config_file_path);
-        this->m_Properties = loader->get_conf();
-    SCOPE_END
-    RED(" Config loaded. ");
-    logger->debug("Loading {} has done", config_file_path);
-    std::unique_ptr<pcap_if_t, pcap_if_t_deleter> alldevs;
-    auto devices = alldevs.get();
-    int ret = pcap_findalldevs(&devices, err_buf);
-    if (ret != 0) {
-        std::cout << "查找网卡设备失败, pcap_findalldevs() failed: " << err_buf << std::endl;
-        logger->error("查找网卡设备失败: {}", err_buf);
-        exit(EXIT_FAILURE);
+void Captor::perform_predict(raw_data_t packet, const struct pcap_pkthdr *pcap_header) {
+#ifdef FOR_TEST
+    using std::chrono::duration_cast;
+    using std::chrono::seconds;
+    using std::chrono::steady_clock;
+    if (duration_cast<seconds>(steady_clock::now() - m_start_time).count() >= 300) {
+        pcap_breakloop(m_handle.get());
     }
-
-    // 输出网卡列表
-    if (!this->m_Properties[keys::DEVICE_NAME].empty()) {
-        bool found {false};
-        for (auto d = alldevs.get(); d != nullptr; d = d->next) {
-            found = d->name == this->m_Properties[keys::DEVICE_NAME];
-            if (found) break;
-        }
-        if (!found) {
-            std::cout << "找不到网卡设备: [" << this->m_Properties[keys::DEVICE_NAME] << "]\n";
-            logger->error("找不到网卡设备: {}", this->m_Properties[keys::DEVICE_NAME]);
-            exit(EXIT_FAILURE);
-        }
-    }
-    alldevs.reset();
-    logger->debug("{}", " >>>>>>>>>>>>>>>>>>> Init Captor Args");
-    this->init_captor_args();
-    logger->debug("{}", " <<<<<<<<<<<<<<<<<<< done");
-#ifndef NO_KAFKA
-    logger->debug("{}", " >>>>>>>>>>>>>>>>>>> Loading Kafka context");
-    this->m_kafkaProducer = std::make_unique<KafkaProducer>(
-            this->m_Properties[keys::KAFKA_BROKER],
-            this->m_Properties[keys::KAFKA_TOPIC],
-            std::stoi(this->m_Properties[keys::KAFKA_PARTITION])
-    );
-    logger->debug("{}", " <<<<<<<<<<<<<<<<<<< done");
 #endif
-#ifndef CAP_ONLY
-    RED(" Loading Python context ");
-    logger->debug("{}", " >>>>>>>>>>>>>>>>>>> Loading Python context");
-    this->m_torch_api = std::make_unique<TorchAPI>(
-            this->m_Properties[keys::MODEL_PATH]
-    );
-    logger->debug("{}", " <<<<<<<<<<<<<<<<<<< done");
-#endif
-
-#ifdef RABBITMQ
-    std::cout << "\n\t\033[31m =================== Load MQ Context ============\033[0m\n";
-    if (NOT this->load_mq_context()) exit(EXIT_FAILURE);
-#endif
-}
-
-PCAPParser::~PCAPParser() {
-#ifdef RABBITMQ
-    this->cleanup_mq_transactions();
-#endif
-    DEBUG_CALL(std::cout << "");
-}
-
-void PCAPParser::perform_predict(const u_char *packet, const struct pcap_pkthdr *pcap_header) {
-    if (std::chrono::duration_cast<std::chrono::seconds>(std::chrono::steady_clock::now() - m_start_time).count() >=
-        300) {
-        pcap_breakloop(m_handle);
-        RED(packet_count);
-        RED(non_benign);
-        RED(num_151);
-    }
 
 #pragma region SOMETHING
-    /** extract as IP headers and resolve the IPs */
-    auto ip_packet_header = reinterpret_cast<ip_header_t> (packet + ETH_HEADER_LEN);
+    /** extract as IP packet and resolve the IPs */
+    auto ip_packet_header = reinterpret_cast<ip_header_t> ((const u_char *) packet + ETH_HEADER_LEN);
     /** 处理 IP 地址 */
-    logger->debug("{}", "处理 IP 地址");
+    m_logger->debug("{}", "处理 IP 地址");
     char src_ip[INET_ADDRSTRLEN];
     char dst_ip[INET_ADDRSTRLEN];
     inet_ntop(AF_INET, &(ip_packet_header->saddr), src_ip, INET_ADDRSTRLEN);
     inet_ntop(AF_INET, &(ip_packet_header->daddr), dst_ip, INET_ADDRSTRLEN);
-    logger->debug("src IP: {}", src_ip);
-    logger->debug("dst IP: {}", dst_ip);
-    if ("192.168.1.51" == std::string(src_ip)) {
-        num_151++;
-                return;
-    }
+    m_logger->debug("src IP: {}", src_ip);
+    m_logger->debug("dst IP: {}", dst_ip);
 
     /** get_conf the IP header length */
-    size_t ip_hdr_len = (ip_packet_header->ihl) * 4;
+    size_t ip_hdr_len = (ip_packet_header->ihl) << 2;
     uint16_t src_port, dst_port;
     std::string protocol;
     /** determine the protocol */
@@ -194,7 +154,7 @@ void PCAPParser::perform_predict(const u_char *packet, const struct pcap_pkthdr 
         case IPPROTO_TCP:
             /** extract as TCP */
             tcp_header_t tcp_hdr;
-            tcp_hdr = reinterpret_cast<tcp_header_t>(packet + ETH_HEADER_LEN + ip_hdr_len);
+            tcp_hdr = reinterpret_cast<tcp_header_t>((const u_char *) packet + ETH_HEADER_LEN + ip_hdr_len);
             src_port = ntohs(tcp_hdr->source);
             dst_port = ntohs(tcp_hdr->dest);
             protocol = "TCP";
@@ -202,7 +162,7 @@ void PCAPParser::perform_predict(const u_char *packet, const struct pcap_pkthdr 
         case IPPROTO_UDP:
             /** extract as UDP */
             udp_header_t udp_hdr;
-            udp_hdr = reinterpret_cast<udp_header_t>(packet + ETH_HEADER_LEN + ip_hdr_len);
+            udp_hdr = reinterpret_cast<udp_header_t>((const u_char *) packet + ETH_HEADER_LEN + ip_hdr_len);
             src_port = ntohs(udp_hdr->source);
             dst_port = ntohs(udp_hdr->dest);
             protocol = "UDP";
@@ -210,7 +170,7 @@ void PCAPParser::perform_predict(const u_char *packet, const struct pcap_pkthdr 
         case IPPROTO_ICMP:
             /** extract the ICMP message type and code */
             icmp_header_t icmp_hdr;
-            icmp_hdr = reinterpret_cast<icmp_header_t>(packet + ETH_HEADER_LEN + ip_hdr_len);
+            icmp_hdr = reinterpret_cast<icmp_header_t>((const u_char *) packet + ETH_HEADER_LEN + ip_hdr_len);
             src_port = icmp_hdr->type;
             dst_port = icmp_hdr->code;
             protocol = "ICMP";
@@ -227,16 +187,12 @@ void PCAPParser::perform_predict(const u_char *packet, const struct pcap_pkthdr 
 
 #pragma region Jsonify
 
-#ifndef CAP_ONLY
-    auto tensor {torch::from_blob(this->bit_vec.data(), {1, 128, 1}, at::kFloat)};
-    tensor = tensor.transpose(1, 2);
-    //    exit(EXIT_SUCCESS);
+    auto sp = std::make_shared<SuperPacket>(packet, this->m_config.max_payload_len, this->m_link_type);
+    sp->fill_bit_vec(&(this->m_config), this->bit_vec);
+    auto tensor{torch::from_blob(this->bit_vec.data(), {1, 1, 128}, at::kFloat)};
     std::vector<torch::jit::IValue> inputs(1, tensor);
-    std::string label {this->m_torch_api->predict(inputs)};
+    std::string label{this->m_torch_api->predict(inputs)};
     this->bit_vec.clear();
-#else
-    std::string label = "EARLY RETURN";
-#endif
 
     nlohmann::json result = {
             {"srcIp",      src_ip},
@@ -251,167 +207,10 @@ void PCAPParser::perform_predict(const u_char *packet, const struct pcap_pkthdr 
 #pragma endregion
 
     if (label != "benign") {
-        non_benign++;
-#ifdef RABBITMQ
-        this->publish_message(out.str().c_str());
-#endif
-        logger->debug("分类结果: {}", label);
-#ifndef NO_KAFKA
-        this->m_kafkaProducer->pushMessage(result.dump(), "");
-#endif
+        m_logger->debug("分类结果: {}", label);
+        this->m_kafka_producer->pushMessage(result.dump(), "");
         DEBUG_CALL(std::cout << "\033[31m" << result.dump() << "\033[0m" << std::endl);
-        logger->debug("json -> kafka: {}", result.dump());
+        m_logger->debug("json -> kafka: {}", result.dump());
     }
 }
 
-void PCAPParser::write_output(const std::shared_ptr<SuperPacket> &sp) {
-    sp->get_bitstring(&(this->m_Config), this->bit_vec);
-}
-
-#ifdef RABBIMQ
-void PCAPParser::cleanup_mq_transactions() {
-    // Cleanup and close connection
-    amqp_channel_close(state_buff, channel, AMQP_REPLY_SUCCESS);
-    amqp_connection_close(state_buff, AMQP_REPLY_SUCCESS);
-    amqp_destroy_connection(state_buff);
-}
-#endif
-
-void PCAPParser::init_captor_args() {
-    m_TimeVal.tv_sec = 0;
-    m_TimeVal.tv_usec = 0;
-    auto size = SIZE_IPV4_HEADER_BITSTRING
-                + SIZE_TCP_HEADER_BITSTRING
-                + SIZE_UDP_HEADER_BITSTRING
-                + SIZE_ICMP_HEADER_BITSTRING;
-    this->bit_vec.reserve(size << 5);
-}
-
-void *PCAPParser::operator new(size_t size) {
-    DEBUG_CALL(std::cout << "\n\t\033[34m ----------------- 分配 " << size
-                         << " bytes 内存 -------------------- \033[0m\n");
-    return malloc(size);
-}
-
-#ifdef RABBIMQ
-bool PCAPParser::init_connection() {
-    this->state_buff = amqp_new_connection();
-    //    std::cout << "\033[36m >>>> " << __LINE__ << std::endl;
-    //    amqp_response_type_enum status = amqp_get_rpc_reply(state_buff).reply_type;
-    //    std::cout << "\033[36m >>>> " << __LINE__ << std::endl;
-    //    std::string out(__PRETTY_FUNCTION__);
-    //    std::cout << "\033[36m >>>> " << __LINE__ << std::endl;
-    return true;
-    //    return PCAPParser::check_last_status(status, out);
-}
-
-bool PCAPParser::configure_socket() {
-    this->socket = amqp_tcp_socket_new(state_buff);
-    if (!socket) {
-        std::cout << "Error creating TCP socket\n";
-        return false;
-    }
-    return true;
-    amqp_response_type_enum status = amqp_get_rpc_reply(state_buff).reply_type;
-    std::string out(__PRETTY_FUNCTION__);
-    return PCAPParser::check_last_status(status, out);
-}
-
-bool PCAPParser::connect_to_server() {
-    if (amqp_socket_open(this->socket, "172.22.105.151", 5672)) {
-        std::cout << "Error connecting to RabbitMQ server\n";
-        return false;
-    }
-    return true;
-    amqp_response_type_enum status = amqp_get_rpc_reply(state_buff).reply_type;
-    std::string out(__PRETTY_FUNCTION__);
-    return PCAPParser::check_last_status(status, out);
-}
-
-bool PCAPParser::login() {
-    // Login
-    amqp_login(state_buff, "/",
-               0,
-               131072,
-               0,
-               amqp_sasl_method_enum::AMQP_SASL_METHOD_PLAIN,
-               "user", "password");
-    //    amqp_response_type_enum status = amqp_get_rpc_reply(state_buff).reply_type;
-    //    std::string out(__PRETTY_FUNCTION__);
-    //    bool login_succeed = PCAPParser::check_last_status(status, out);
-    //    if (!login_succeed) {
-    //        std::cout << "login failed!\n";
-    //        return false;
-    //    }
-    amqp_channel_open(state_buff, 1);
-    return true;
-    //    status = amqp_get_rpc_reply(state_buff).reply_type;
-    //    return PCAPParser::check_last_status(status, out);
-}
-
-bool PCAPParser::declare_queue() {
-    // Declare queue
-    amqp_queue_declare_ok_t *res = amqp_queue_declare(state_buff, channel, queue,
-                                                      0,
-                                                      true, 0, 1, amqp_empty_table);
-    queue = amqp_bytes_malloc_dup(res->queue);
-    if (queue.bytes == nullptr) {
-        std::cout << "Error duplicating queue name\n";
-        return false;
-    }
-    return true;
-}
-
-bool PCAPParser::bind_queue_to_exchange() {
-    // Bind queue to exchange
-    auto arguments = amqp_empty_table;
-    amqp_queue_bind(state_buff, channel, queue, exchange, routing_key, arguments);
-    return true;
-    auto status = amqp_get_rpc_reply(state_buff).reply_type;
-    std::string out(__PRETTY_FUNCTION__);
-    return PCAPParser::check_last_status(status, out);
-}
-
-bool PCAPParser::publish_message(const char *message) {
-    // Publish message
-    amqp_bytes_t body = amqp_str(message);
-    amqp_basic_publish(state_buff, channel, exchange, routing_key, 0, 0, &(this->properties), body);
-    return true;
-    auto status = amqp_get_rpc_reply(state_buff).reply_type;
-    std::string out(__PRETTY_FUNCTION__);
-    return PCAPParser::check_last_status(status, out);
-}
-
-bool PCAPParser::load_mq_context() {
-    if (NOT this->init_connection()) return false;
-    if (NOT this->configure_socket()) return false;
-    if (NOT this->connect_to_server()) return false;
-    if (NOT this->login()) return false;
-    if (NOT this->declare_queue()) return false;
-    if (NOT this->bind_queue_to_exchange()) return false;
-    return true;
-}
-
-bool PCAPParser::check_last_status(amqp_response_type_enum status, std::string &out) {
-    bool ret = false;
-    switch (status) {
-        case AMQP_RESPONSE_NORMAL:
-            out += "\u001B[36m response normal, the RPC completed successfully033[0m\n";
-            ret = true;
-        case AMQP_RESPONSE_NONE:
-            out += "\u001B[31m last operation got AMQP_RESPONSE_NONE，the library got an EOF from the socket\033[0m\n";
-            break;
-        case AMQP_RESPONSE_LIBRARY_EXCEPTION:
-            out += "\u001B[31m last operation got an error occurred in the library\u001B[0m\n";
-            break;
-        case AMQP_RESPONSE_SERVER_EXCEPTION:
-            out += "\u001B[31m last operation got an server exception, the broker returned an error\u001B[0m\n";
-            break;
-        default:
-            out += "\u001B[31m last operation got an unknown error \u001B[0m\n";
-            break;
-    }
-    std::cout << out << std::endl;
-    return ret;
-}
-#endif

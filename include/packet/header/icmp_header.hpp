@@ -1,12 +1,12 @@
-#ifndef ICMP_HEADER
-#define ICMP_HEADER
+#ifndef LIVE_CAPTURE_ICMP_HEADER_HPP
+#define LIVE_CAPTURE_ICMP_HEADER_HPP
 
 #include <netinet/ip.h>
 #include <netinet/ip_icmp.h>
 
-#include "headers/packet_header.hpp"
+#include "packet/header/packet_header.hpp"
+#include "common.hpp"
 
-#define SIZE_ICMP_HEADER_BITSTRING 8
 
 /**
  * We consider the ICMP header to always be 8 bytes, with the rest of the data
@@ -15,19 +15,24 @@
  */
 
 class ICMPHeader : public PacketHeader {
-  public:
+public:
     /* Required Functions */
-    void *get_raw() override;
-    void set_raw(void *raw) override;
+    raw_data_t get_raw() override;
+
+    void set_raw(raw_data_t raw) override;
+
     void print_header(FILE *out) override;
-    uint32_t get_header_len() override {
+
+    uint32_t header_len() override {
         return 8;
     };
-    void get_bitstring(std::vector<float> &to_fill, int8_t fill_with) override;
+
+    void fill_bit_vec(std::vector<float> &bit_vec, int8_t bit) override;
+
     void get_bitstring_header(std::vector<std::string> &to_fill) override;
 
-  private:
-    struct icmp *raw = nullptr;
+private:
+    icmp_packet_t raw{ };
 };
 
 #endif

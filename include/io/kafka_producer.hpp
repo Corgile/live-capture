@@ -13,7 +13,7 @@
 #include "callback/cb_producer_event.hpp"
 #include "callback/cb_producer_delivery_report.hpp"
 #include "callback/cb_hash_partitioner.hpp"
-#include "common_macros.hpp"
+#include "common.hpp"
 
 
 class KafkaProducer {

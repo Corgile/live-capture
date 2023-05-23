@@ -19,7 +19,7 @@ void DailyLogger::info(const char *format, std::string args) {
     logger_->info(format, args);
 }
 
-void DailyLogger::debug(char const *format, const std::string& args) {
+void DailyLogger::debug(char const *format, const std::string &args) {
     logger_->debug<>(format, args);
 }
 
@@ -47,7 +47,7 @@ DailyLogger::DailyLogger() {
     warn_sink->set_level(spdlog::level::warn);
 
     std::vector<spdlog::sink_ptr> sinks{info_sink, debug_sink, error_sink, warn_sink};
-    logger_ = std::make_shared<spdlog::logger>("logger", begin(sinks), end(sinks));
+    logger_ = std::make_shared<spdlog::logger>("m_logger", begin(sinks), end(sinks));
     logger_->flush_on(spdlog::level::warn);
     logger_->set_level(spdlog::level::debug);
 }

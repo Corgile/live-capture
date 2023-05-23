@@ -30,13 +30,11 @@ ConfigLoader::ConfigLoader(const std::string &m_config_file_path) {
         this->m_configs[key] = value;
     }
     for (const auto &p: this->m_configs) {
-        std::cout << "加载配置： " << p.first << " = " << p.second << std::endl;
+        std::cout << "加载配置： " << p.first << "=" << p.second << std::endl;
         logger->debug("加载配置 {}", p.first + p.second);
     }
     this->check_config(keys::MODEL_PATH);
-    this->check_config(keys::SCRIPT_PATH);
-    this->check_config(keys::SCRIPT_NAME);
-    this->check_config(keys::KAFKA_BROKER);
+    this->check_config(keys::KAFKA_BROKERS);
     this->check_config(keys::KAFKA_TOPIC);
     this->check_config(keys::KAFKA_PARTITION);
 }

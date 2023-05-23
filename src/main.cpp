@@ -6,7 +6,7 @@
 #include "io/pcap_parser.hpp"
 #include "io/config_loader.hpp"
 #include "io/daily_logger.hpp"
-#include "common_macros.hpp"
+#include "common.hpp"
 
 int main(int argc, char **argv) {
     auto logger = DailyLogger::getInstance();
@@ -25,7 +25,7 @@ int main(int argc, char **argv) {
     }
     RED("Config pcapConfig = Config::get_instance();");
     Config pcapConfig = Config::get_instance();
-    PCAPParser pcap_parser(pcapConfig, config_properties);
+    Captor pcap_parser(pcapConfig, config_properties);
     pcap_parser.perform();
     return 0;
 }

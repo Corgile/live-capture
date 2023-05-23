@@ -3,7 +3,7 @@
 //
 
 #include "callback/cb_producer_event.hpp"
-#include "common_macros.hpp"
+#include "common.hpp"
 
 void ProducerEventCb::event_cb(RdKafka::Event &event) {
     switch (event.type()) {

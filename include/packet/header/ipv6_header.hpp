@@ -1,35 +1,42 @@
-#ifndef IPv6_HEADER
-#define IPv6_HEADER
+#ifndef LIVE_CAPTURE_IPv6_HEADER_HPP
+#define LIVE_CAPTURE_IPv6_HEADER_HPP
 
 #include <netinet/ip.h>
 #include <netinet/ip6.h>
 
-#include "headers/packet_header.hpp"
-
-#define SIZE_IPV6_HEADER_BITSTRING 40
+#include "packet/header/packet_header.hpp"
+#include "common.hpp"
 
 /*
  * Currently only supported fixed (first) IPv6 Header parsing
  */
 
 class IPv6Header : public PacketHeader {
-  public:
+public:
     /* Required Functions */
-    void *get_raw() override;
-    void set_raw(void *raw) override;
+    raw_data_t get_raw() override;
+
+    void set_raw(raw_data_t raw) override;
+
     void print_header(FILE *out) override;
-    uint32_t get_header_len() override;
-    void get_bitstring(std::vector<float> &to_fill, int8_t fill_with) override;
+
+    uint32_t header_len() override;
+
+    void fill_bit_vec(std::vector<float> &bit_vec, int8_t bit) override;
+
     void get_bitstring_header(std::vector<std::string> &to_fill) override;
 
     /* Header Specific */
     std::string get_src_ip();
+
     std::string get_dst_ip();
+
     uint8_t get_ip_proto();
+
     uint32_t get_total_len();
 
-  private:
-    struct ip6_hdr *raw = nullptr;
+private:
+    ipv6_header_t raw{ };
 };
 
 #endif
