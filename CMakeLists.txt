@@ -5,17 +5,7 @@ set(CMAKE_CXX_STANDARD 14)
 set(binary_target live-capture)
 
 
-set(IF_DEBUG "" CACHE STRING "是否打印调试信息")
-set(IF_INFO "" CACHE STRING "是否打印一般信息")
-set(IF_WARN "" CACHE STRING "是否打印警告信息")
-set(IF_TEST "" CACHE STRING "是否打印警告信息")
-
-# 使用变量来设置宏定义
-add_compile_definitions(${IF_DEBUG})
-add_compile_definitions(${IF_WARN})
-add_compile_definitions(${IF_INFO})
-add_compile_definitions(${IF_TEST})
-
+list(APPEND CMAKE_PREFIX_PATH /home/gzhuadmin/workspace/libtorch)
 
 # all public header for all source files
 include_directories(

@@ -31,7 +31,7 @@ public:
 
     void print_packet(FILE *out);
 
-    bool check_parseable() const;
+    [[nodiscard]] bool check_parseable() const;
 
     std::tuple<uint8_t, uint8_t> get_packet_type();
 

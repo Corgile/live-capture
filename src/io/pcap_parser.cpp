@@ -2,6 +2,10 @@
 #include <utility>
 #include <thread>
 #include <nlohmann/json.hpp>
+#include <ifaddrs.h>
+
+#include <netinet/in.h>
+
 #include "io/pcap_parser.hpp"
 #include "packet/superpacket.hpp"
 #include "common.hpp"
@@ -16,30 +20,49 @@ char err_buf[PCAP_ERRBUF_SIZE];
 
 Captor::Captor(Config config, const std::string &config_file_path) : m_config(std::move(config)) {
 
-    m_logger->debug(" >>>>>>>>>>>>>>>>>>> Loading properties: {}", config_file_path);
-    SCOPE_START
-        auto loader = std::make_unique<ConfigLoader>(config_file_path);
-        this->m_props = loader->get_conf();
-    SCOPE_END
-    m_logger->debug("Loading {} has done", config_file_path);
-    std::unique_ptr<pcap_if_t, pcap_if_t_deleter> alldevs;
-    auto devices = alldevs.get();
-    int ret = pcap_findalldevs(&devices, err_buf);
-    if (ret != 0) {
-        m_logger->error("查找网卡设备失败: {}", err_buf);
-        exit(EXIT_FAILURE);
-    }
+  m_logger->debug(" >>>>>>>>>>>>>>>>>>> Loading properties: {}", config_file_path);
+  SCOPE_START
+    auto loader = std::make_unique<ConfigLoader>(config_file_path);
+    this->m_props = loader->get_conf();
+  SCOPE_END
+  m_logger->debug("Loading {} has done", config_file_path);
+  std::unique_ptr<pcap_if_t, pcap_if_t_deleter> alldevs;
+  auto device_buffer = alldevs.get();
+  int ret = pcap_findalldevs(&device_buffer, err_buf);
+  if (ret != 0) {
+    m_logger->error("查找网卡设备失败: {}", err_buf);
+    exit(EXIT_FAILURE);
+  }
 
-    if (!this->m_props[keys::DEVICE_NAME].empty()) {
-        bool found{false};
-        for (auto d = alldevs.get(); d != nullptr; d = d->next) {
-            found = d->name == this->m_props[keys::DEVICE_NAME];
-            if (found) break;
-        }
-        if (!found) {
-            m_logger->error("找不到网卡设备: {}", this->m_props[keys::DEVICE_NAME]);
-            exit(EXIT_FAILURE);
-        }
+  // get all ipv4 addresses
+  for (auto nic = device_buffer; nic != nullptr; nic = nic->next) {
+    if (nic->addresses == nullptr) {
+      continue;
+    }
+    for (auto addr = nic->addresses; addr != nullptr; addr = addr->next) {
+      if (addr->addr->sa_family != AF_INET) {
+        continue;
+      }
+      // 将地址结构转换为 sockaddr_in 结构
+      auto sa = reinterpret_cast<struct sockaddr_in *>(addr->addr);
+      char ipAddressBuffer[INET_ADDRSTRLEN];
+      if (inet_ntop(AF_INET, &(sa->sin_addr), ipAddressBuffer, INET_ADDRSTRLEN) != nullptr) {
+        std::string ipAddress = ipAddressBuffer;
+        this->m_skip_addr.emplace_back(ipAddressBuffer);
+        std::cout << "IPv4 Address: " << ipAddress << std::endl;
+      }
+    }
+  }
+  if (!this->m_props[keys::DEVICE_NAME].empty()) {
+    bool found{false};
+    for (auto d = alldevs.get(); d != nullptr; d = d->next) {
+      found = d->name == this->m_props[keys::DEVICE_NAME];
+      if (found) break;
+    }
+    if (!found) {
+      m_logger->error("找不到网卡设备: {}", this->m_props[keys::DEVICE_NAME]);
+      exit(EXIT_FAILURE);
+    }
     }
     alldevs.reset();
     m_logger->debug("{}", " >>>>>>>>>>>>>>>>>>> Init Captor Args");
@@ -135,25 +158,34 @@ void Captor::perform_predict(raw_data_t packet, const struct pcap_pkthdr *pcap_h
 
 #pragma region SOMETHING
     /** extract as IP packet and resolve the IPs */
-    auto ip_packet_header = reinterpret_cast<ip_header_t> ((const u_char *) packet + ETH_HEADER_LEN);
-    /** 处理 IP 地址 */
-    m_logger->debug("{}", "处理 IP 地址");
-    char src_ip[INET_ADDRSTRLEN];
-    char dst_ip[INET_ADDRSTRLEN];
-    inet_ntop(AF_INET, &(ip_packet_header->saddr), src_ip, INET_ADDRSTRLEN);
-    inet_ntop(AF_INET, &(ip_packet_header->daddr), dst_ip, INET_ADDRSTRLEN);
-    m_logger->debug("src IP: {}", src_ip);
-    m_logger->debug("dst IP: {}", dst_ip);
+  auto ip_packet_header = reinterpret_cast<ip_header_t> ((const u_char *) packet + ETH_HEADER_LEN);
+  /** 处理 IP 地址 */
+  m_logger->debug("{}", "处理 IP 地址");
+  char src_ip[INET_ADDRSTRLEN];
+  char dst_ip[INET_ADDRSTRLEN];
+  inet_ntop(AF_INET, &(ip_packet_header->saddr), src_ip, INET_ADDRSTRLEN);
+  inet_ntop(AF_INET, &(ip_packet_header->daddr), dst_ip, INET_ADDRSTRLEN);
+  m_logger->debug("src IP: {}", src_ip);
+  m_logger->debug("dst IP: {}", dst_ip);
 
-    /** get_conf the IP header length */
-    size_t ip_hdr_len = (ip_packet_header->ihl) << 2;
-    uint16_t src_port, dst_port;
-    std::string protocol;
-    /** determine the protocol */
-    switch (ip_packet_header->protocol) {
-        case IPPROTO_TCP:
-            /** extract as TCP */
-            tcp_header_t tcp_hdr;
+  if ("0.0.0.0" == std::string(src_ip) || "0.0.0.0" == std::string(dst_ip)) return;
+  auto src_is_localhost = m_skip_addr.end() != std::find(m_skip_addr.begin(), m_skip_addr.end(), src_ip);
+  auto dst_is_in_broker = this->m_props[keys::KAFKA_BROKERS].find(dst_ip) != std::string::npos;
+  auto dst_is_localhost = m_skip_addr.end() != std::find(m_skip_addr.begin(), m_skip_addr.end(), dst_ip);
+  auto src_is_in_broker = this->m_props[keys::KAFKA_BROKERS].find(src_ip) != std::string::npos;
+  if (src_is_localhost && dst_is_in_broker || dst_is_localhost && src_is_in_broker) {
+    return;
+  }
+
+  /** get_conf the IP header length */
+  size_t ip_hdr_len = (ip_packet_header->ihl) << 2;
+  uint16_t src_port, dst_port;
+  std::string protocol;
+  /** determine the protocol */
+  switch (ip_packet_header->protocol) {
+    case IPPROTO_TCP:
+      /** extract as TCP */
+      tcp_header_t tcp_hdr;
             tcp_hdr = reinterpret_cast<tcp_header_t>((const u_char *) packet + ETH_HEADER_LEN + ip_hdr_len);
             src_port = ntohs(tcp_hdr->source);
             dst_port = ntohs(tcp_hdr->dest);
@@ -195,14 +227,14 @@ void Captor::perform_predict(raw_data_t packet, const struct pcap_pkthdr *pcap_h
     this->bit_vec.clear();
 
     nlohmann::json result = {
-            {"srcIp",      src_ip},
-            {"attackType", label},
-            {"dstIp",      dst_ip},
-            {"srcPort",    src_port},
-            {"dstPort",    dst_port},
-            {"protocol",   protocol},
-            {"timestamp",  pcap_header->ts.tv_sec},
-            {"u_sec",      pcap_header->ts.tv_usec},
+        {"srcIp",      src_ip},
+        {"attackType", label},
+        {"dstIp",      dst_ip},
+        {"srcPort",    src_port},
+        {"dstPort",    dst_port},
+        {"protocol",   protocol},
+        {"timestamp",  pcap_header->ts.tv_sec},
+        {"uSec",       pcap_header->ts.tv_usec},
     };
 #pragma endregion
 
@@ -213,4 +245,5 @@ void Captor::perform_predict(raw_data_t packet, const struct pcap_pkthdr *pcap_h
         m_logger->debug("json -> kafka: {}", result.dump());
     }
 }
+
 

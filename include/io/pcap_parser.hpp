@@ -74,6 +74,8 @@ private:
 
     std::shared_ptr<DailyLogger> m_logger = DailyLogger::getInstance();
 
+    std::vector<std::string> m_skip_addr{"0.0.0.0"};
+
     std::vector<float> bit_vec;
     Config m_config;
     uint32_t m_link_type{ };

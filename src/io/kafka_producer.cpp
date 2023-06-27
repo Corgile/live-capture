@@ -92,19 +92,20 @@ KafkaProducer::KafkaProducer(const std::string &brokers, const std::string &topi
 }
 
 // 发送消息
-void KafkaProducer::pushMessage(const std::string &str, const std::string &key) {
-    size_t len = str.length();
-    void *payload = const_cast<void *>(static_cast<const void *>(str.data()));
+void KafkaProducer::pushMessage(const std::string &str, const std::string &_key) {
+
+    const std::vector<char> *payload = new std::vector<char>(str.begin(), str.end());
+    const std::vector<char> *key = new std::vector<char>(_key.begin(), _key.end());
 
     // produce 方法，生产和发送单条消息到 Broker
     // 如果不加时间戳，内部会自动加上当前的时间戳
     RdKafka::ErrorCode errorCode = m_producer->produce(
             m_topic,                           // 指定发送到的主题
             RdKafka::Topic::PARTITION_UA,   // 指定分区，如果为PARTITION_UA则通过
-            RdKafka::Producer::RK_MSG_COPY, // 消息拷贝；partitioner_cb的回调选择合适的分区
+            //            RdKafka::Producer::RK_MSG_COPY, // 消息拷贝；partitioner_cb的回调选择合适的分区
             payload,                                // 消息本身
-            len,                                    // 消息长度
-            &key,                                   // 消息key
+            //            len,                      // 消息长度
+            key,                                    // 消息key
             nullptr // an optional application-provided per-message opaque pointer
             // that will be provided in the message delivery callback to let
             // the application reference a specific message
