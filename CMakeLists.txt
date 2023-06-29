@@ -18,11 +18,11 @@ include_directories(
 )
 
 
-aux_source_directory(src ALL_SOURCES)
-aux_source_directory(src/io ALL_SOURCES)
-aux_source_directory(src/packet ALL_SOURCES)
-aux_source_directory(src/callback ALL_SOURCES)
-aux_source_directory(src/packet/header ALL_SOURCES)
+aux_source_directory(src                ALL_SOURCES)
+aux_source_directory(src/io             ALL_SOURCES)
+aux_source_directory(src/packet         ALL_SOURCES)
+aux_source_directory(src/callback       ALL_SOURCES)
+aux_source_directory(src/packet/header  ALL_SOURCES)
 
 foreach (file ${ALL_SOURCES})
     message(STATUS "adding source file ${file} to ${binary_target}")
