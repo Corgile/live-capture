@@ -15,7 +15,9 @@
 #include "callback/cb_hash_partitioner.hpp"
 #include "common.hpp"
 
-
+/**
+* @brief kafka 消息发送器
+*/
 class KafkaProducer {
 public:
     /**

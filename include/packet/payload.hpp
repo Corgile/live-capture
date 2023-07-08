@@ -5,8 +5,8 @@
 #include "common.hpp"
 
 /**
- * Payload is currently defined as any application level data, expressed as a
- * vector of bytes with no semantic structure
+ * 有效载荷目前被定义为任何应用级数据，
+ * 表示为没有语义结构的字节向量
  */
 
 class Payload : public PacketHeader {

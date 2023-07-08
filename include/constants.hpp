@@ -7,7 +7,9 @@
 
 #include <string>
 
-
+/**
+* @brief 配置项常量
+*/
 namespace keys {
 
     static const std::string DEVICE_NAME{"device.name"};

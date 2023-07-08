@@ -19,6 +19,9 @@
 #include "packet/header/tcp_header.hpp"
 #include "packet/header/udp_header.hpp"
 
+/**
+* @brief 不同协议的数据包抽象类，OOP思想
+*/
 class SuperPacket {
 public:
     SuperPacket(raw_data_t pkt, uint32_t max_payload_len, uint32_t link_type);

@@ -43,27 +43,58 @@
 
 
 /**
- * Parses a PCAP from a written file
- */
-
+* @brief 程序核心部分，采用组合模式，在此类中注入了其他类（日志、kafka）
+* 功能是：<br/>
+*   - 处理网络流量包<br/>
+*   - 构造tensor输入到算法中进行预测<br/>
+*   - 得到返回值并附带一些信息发送到Kafka
+*/
 class Captor {
 public:
 
-    explicit Captor(Config config, const std::string &);
+    /**
+    * @brief 构造函数，需要根据配置项来实例化，所以需要一个配置文件路径
+    * @param config 配置类
+    * @param path   配置文件路径
+    */
+    explicit Captor(Config config, const std::string &path);
 
+    /**
+    * @brief 析构函数
+    */
     ~Captor() = default;
 
+    /**
+    * @brief 工作方法，包含核心逻辑
+    */
     void perform();
 
 
 private:
 
+    /**
+    * @brief 流量包处理方法
+    * @param user_data 用户自定义参数
+    * @param packet_header pcap包头部，包含包长度、时间戳等信息
+    * @param packet 流量包本体
+    */
     static void packet_handler(u_char *user_data, const struct pcap_pkthdr *packet_header, const u_char *packet);
 
+    /**
+    * @brief 初始化一个实时监听网卡的handler
+    */
     void init_live_handle();
 
-    void perform_predict(raw_data_t packet, const struct pcap_pkthdr *);
+    /**
+    * @brief 进行预测工作
+    * @param packet 流量包
+    * @param pcaphdr pcap头部
+    */
+    void perform_predict(raw_data_t packet, const struct pcap_pkthdr * pcaphdr);
 
+    /**
+    * @brief 自定义智能指针的deleter
+    */
     struct pcap_if_t_deleter {
         void operator()(pcap_if_t *p) const {
             pcap_freealldevs(p);
@@ -72,23 +103,50 @@ private:
 
 private:
 
+    /**
+    * @brief 依然是注入一个日志记录器
+    */
     std::shared_ptr<DailyLogger> m_logger = DailyLogger::getInstance();
 
+    /**
+    * @brief 这个数组存放应当被忽略掉的IP，比如0.0.0.0
+    */
     std::vector<std::string> m_skip_addr{"0.0.0.0"};
 
+    /**
+    * @brief 用于存储将流量包进行转换后的向量
+    */
     std::vector<float> bit_vec;
+    /**
+    * @brief 配置类
+    */
     Config m_config;
+    /**
+    * @brief linktype, pcap参数
+    */
     uint32_t m_link_type{ };
+    /**
+    * @brief 配置项
+    */
     std::map<std::string, std::string> m_props;
 
     // ===============  Prediction  ===============
+    /**
+    * @brief pytorch API,用于分类/检测
+    */
     std::unique_ptr<TorchAPI> m_torch_api;
     // ===============  Publish Kafka  ============
+    /**
+    * @brief kafka消息发送器
+    */
     std::unique_ptr<KafkaProducer> m_kafka_producer;
 #ifdef FOR_TEST
     std::chrono::steady_clock::time_point m_start_time;
 #endif
     //    pcap_t *m_handle;
+    /**
+    * @brief 网卡监听handler
+    */
     std::shared_ptr<pcap_t> m_handle;
 #ifdef RABBITMQ
     // ===============  Publish MQ  ===============

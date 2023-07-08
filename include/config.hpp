@@ -6,8 +6,8 @@
 #include <map>
 #include <string>
 
-/*
- * Config class is a container to hold command line arguments
+/**
+ * Config类是保存命令行参数的容器
  */
 
 class Config {
@@ -43,6 +43,10 @@ public:
             {4, "flow"},
             {5, "tx_mac"}};
 
+    /**
+    * @brief 返回一个Config单例
+    * @return
+    */
     static Config get_instance();
 
     void set_tcp(bool _tcp) { this->tcp = _tcp; }
